@@ -1,5 +1,2 @@
-mod nf;
-mod spec;
-
-pub use nf::*;
-pub use spec::*;
+pub mod nf_json;
+pub mod spec_json;

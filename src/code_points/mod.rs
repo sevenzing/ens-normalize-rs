@@ -1,6 +1,6 @@
-mod constants;
-mod inspector;
+pub(crate) mod constants;
+mod specs;
 mod types;
 
-pub use inspector::CodePointsInspector;
-pub use types::{CodePoint, CodePoints};
+pub use specs::CodePointsSpecs;
+pub use types::*;

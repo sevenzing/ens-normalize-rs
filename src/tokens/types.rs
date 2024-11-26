@@ -1,4 +1,4 @@
-use crate::{CodePoint, CodePoints};
+use crate::CodePoint;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EnsNameToken {
@@ -12,7 +12,7 @@ pub enum EnsNameToken {
 }
 
 impl EnsNameToken {
-    pub fn cps(&self) -> CodePoints {
+    pub fn cps(&self) -> Vec<CodePoint> {
         match self {
             EnsNameToken::Valid(t) => t.cps.clone(),
             EnsNameToken::Mapped(t) => t.cps.clone(),
@@ -21,15 +21,37 @@ impl EnsNameToken {
             _ => vec![],
         }
     }
+
+    pub fn size(&self) -> usize {
+        match self {
+            EnsNameToken::Valid(t) => t.cps.len(),
+            EnsNameToken::Mapped(t) => t.cps.len(),
+            EnsNameToken::Nfc(t) => t.cps.len(),
+            EnsNameToken::Emoji(t) => t.cps.len(),
+            _ => 0,
+        }
+    }
+
+    pub fn is_text(&self) -> bool {
+        !self.is_emoji()
+    }
+
+    pub fn is_emoji(&self) -> bool {
+        matches!(self, EnsNameToken::Emoji(_))
+    }
+
+    pub fn ignored(&self) -> bool {
+        matches!(self, EnsNameToken::Ignored(_))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenValid {
-    pub cps: CodePoints,
+    pub cps: Vec<CodePoint>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenMapped {
-    pub cps: CodePoints,
+    pub cps: Vec<CodePoint>,
     pub cp: CodePoint,
 }
 
@@ -48,13 +70,13 @@ pub struct TokenStop {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenNfc {
-    pub cps: CodePoints,
-    pub input: CodePoints,
+    pub cps: Vec<CodePoint>,
+    pub input: Vec<CodePoint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenEmoji {
-    pub input: CodePoints,
-    pub emoji: CodePoints,
-    pub cps: CodePoints,
+    pub input: Vec<CodePoint>,
+    pub emoji: Vec<CodePoint>,
+    pub cps: Vec<CodePoint>,
 }
