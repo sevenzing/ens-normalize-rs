@@ -10,7 +10,6 @@ use crate::{
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 
-
 /// This struct contains logic for validating and normalizing code points.
 pub struct CodePointsSpecs {
     cm: HashSet<CodePoint>,
