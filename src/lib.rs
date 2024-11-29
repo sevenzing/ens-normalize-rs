@@ -11,6 +11,6 @@ mod validate;
 
 pub use code_points::*;
 pub use error::{CurrableError, DisallowedSequence, ProcessError};
-pub use process::{beautify, normalize, process, ProcessedName, Processor};
+pub use process::{beautify, normalize, process, tokenize, ProcessedName, Processor};
 pub use tokens::*;
 pub use validate::{LabelType, ValidatedLabel};

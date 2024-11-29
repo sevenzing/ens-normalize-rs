@@ -1,7 +1,7 @@
-use crate::{constants, utils, CodePoint, EnsNameToken, ProcessError, ValidatedLabel};
+use crate::{constants, utils, CodePoint, EnsNameToken, ValidatedLabel};
 
 /// Joins validated labels into a string
-pub fn join_labels(labels: Vec<ValidatedLabel>) -> Result<String, ProcessError> {
+pub fn join_labels(labels: Vec<ValidatedLabel>) -> String {
     let labels_cps = labels.into_iter().map(|label| {
         label
             .tokenized
@@ -20,7 +20,7 @@ pub fn join_labels(labels: Vec<ValidatedLabel>) -> Result<String, ProcessError> 
             .collect::<Vec<_>>()
     });
 
-    Ok(join_cps(labels_cps))
+    join_cps(labels_cps)
 }
 
 /// Joins code points into a string

@@ -25,24 +25,19 @@ ens-normalize-rs = "0.1.0"
 
 ```rust
 fn main() {
+    // Using processor to reuse reloaded data
     let processor = ens_normalize_rs::Processor::default();
     let name = "🅰️🅱.eth";
     let processed = processor.process(name).unwrap();
-    let beautified_name = processed.beautify().unwrap();
-    let normalized_name = processed.normalized;
+    let beautified_name = processed.beautify();
+    let normalized_name = processed.normalize();
 
     assert_eq!(normalized_name, "🅰🅱.eth");
     assert_eq!(beautified_name, "🅰️🅱️.eth");
-}
-```
 
-or simply:
-
-```rust
-use ens_normalize_rs::Processor;
-
-fn main() {
-    let processed = ens_normalize_rs::process("🅰️🅱.eth");
+    // Using process directly
+    let processed = ens_normalize_rs::process("Levvv.eth").unwrap();
+    assert_eq!(processed.normalize(), "levvv.eth");
 }
 ```
 

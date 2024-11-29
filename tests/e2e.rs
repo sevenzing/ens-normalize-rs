@@ -54,13 +54,13 @@ fn e2e_tests(
     let actual = processor.process(name);
     match expected {
         Ok((expected_normalized, expected_beautified)) => {
-            let actual = actual.expect("process should succeed");
+            let res = actual.expect("process should succeed");
+            let normalized = res.normalize();
             assert_eq!(
-                actual.normalized, expected_normalized,
-                "expected '{expected_normalized}', got '{}'",
-                actual.normalized
+                normalized, expected_normalized,
+                "expected '{expected_normalized}', got '{normalized}'"
             );
-            let beautified = actual.beautify().expect("beautify should succeed");
+            let beautified = res.beautify();
             assert_eq!(
                 beautified, expected_beautified,
                 "expected '{expected_beautified}', got '{beautified}'"

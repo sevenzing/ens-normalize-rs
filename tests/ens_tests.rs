@@ -72,7 +72,7 @@ fn process_test_case(processor: &Processor, case: &TestCase) -> Result<(), anyho
     match result {
         Err(_e) if case.error => (),
         Ok(processed) if !case.error => {
-            let actual = processed.normalized;
+            let actual = processed.normalize();
             if let Some(expected) = &case.norm {
                 assert_eq!(
                     actual,

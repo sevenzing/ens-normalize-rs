@@ -12,20 +12,6 @@ pub struct Processor {
 pub struct ProcessedName {
     pub input: String,
     pub labels: Vec<ValidatedLabel>,
-    pub normalized: String,
-}
-
-pub fn process(input: impl AsRef<str>) -> Result<ProcessedName, ProcessError> {
-    let processor = Processor::new(CodePointsSpecs::default());
-    processor.process(input)
-}
-
-pub fn normalize(input: impl AsRef<str>) -> Result<String, ProcessError> {
-    process(input).map(|processed| processed.normalized)
-}
-
-pub fn beautify(input: impl AsRef<str>) -> Result<String, ProcessError> {
-    process(input).and_then(|processed| processed.beautify())
 }
 
 impl Processor {
@@ -45,17 +31,44 @@ impl Processor {
             .into_iter()
             .map(|label| validate_label(label, &self.specs))
             .collect::<Result<Vec<_>, _>>()?;
-        let normalized = join_labels(validated.clone())?;
         Ok(ProcessedName {
             input: input.to_string(),
             labels: validated,
-            normalized,
         })
+    }
+
+    pub fn normalize(&self, input: impl AsRef<str>) -> Result<String, ProcessError> {
+        self.process(input).map(|processed| processed.normalize())
+    }
+
+    pub fn beautify(&self, input: impl AsRef<str>) -> Result<String, ProcessError> {
+        self.process(input).map(|processed| processed.beautify())
     }
 }
 
 impl ProcessedName {
-    pub fn beautify(&self) -> Result<String, ProcessError> {
+    pub fn beautify(&self) -> String {
         beautify_labels(self.labels.clone())
     }
+
+    pub fn normalize(&self) -> String {
+        join_labels(self.labels.clone())
+    }
+}
+
+pub fn tokenize(input: impl AsRef<str>) -> Result<TokenizedName, ProcessError> {
+    let processor = Processor::new(CodePointsSpecs::default());
+    processor.tokenize(input)
+}
+
+pub fn process(input: impl AsRef<str>) -> Result<ProcessedName, ProcessError> {
+    Processor::new(CodePointsSpecs::default()).process(input)
+}
+
+pub fn normalize(input: impl AsRef<str>) -> Result<String, ProcessError> {
+    Processor::new(CodePointsSpecs::default()).normalize(input)
+}
+
+pub fn beautify(input: impl AsRef<str>) -> Result<String, ProcessError> {
+    Processor::new(CodePointsSpecs::default()).beautify(input)
 }

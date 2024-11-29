@@ -1,9 +1,7 @@
-use crate::{
-    constants, join::join_cps, CodePoint, EnsNameToken, LabelType, ProcessError, ValidatedLabel,
-};
+use crate::{constants, join::join_cps, CodePoint, EnsNameToken, LabelType, ValidatedLabel};
 
 /// Beautifies a list of validated labels by replacing Greek code points with their pretty variants.
-pub fn beautify_labels(labels: Vec<ValidatedLabel>) -> Result<String, ProcessError> {
+pub fn beautify_labels(labels: Vec<ValidatedLabel>) -> String {
     let labels_cps = labels.into_iter().map(|label| {
         label
             .tokenized
@@ -21,7 +19,7 @@ pub fn beautify_labels(labels: Vec<ValidatedLabel>) -> Result<String, ProcessErr
             .flatten()
             .collect::<Vec<_>>()
     });
-    Ok(join_cps(labels_cps))
+    join_cps(labels_cps)
 }
 
 fn cps_replaced_greek(mut cps: Vec<CodePoint>, label_type: &LabelType) -> Vec<CodePoint> {

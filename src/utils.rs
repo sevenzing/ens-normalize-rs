@@ -16,6 +16,7 @@ pub fn cps2str(cps: &[CodePoint]) -> String {
         .collect()
 }
 
+#[inline]
 pub fn cp2str(cp: CodePoint) -> String {
     cps2str(&[cp])
 }
@@ -35,6 +36,7 @@ pub fn nfc(str: &str) -> String {
     str.nfc().collect()
 }
 
+#[inline]
 pub fn nfd_cps(cps: &[CodePoint], specs: &CodePointsSpecs) -> Vec<CodePoint> {
     let mut decomposed = Vec::new();
     for cp in cps {
