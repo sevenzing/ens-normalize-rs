@@ -343,7 +343,7 @@ mod tests {
         inner: CurrableError::FencedConsecutive,
         index: 1,
         sequence: "・・".to_string(),
-        maybe_suggest: Some("".to_string())
+        maybe_suggest: Some("・".to_string())
     }))]
     #[case::cm_after_emoji("😎😎😎😎😎😎😎😎\u{300}hello", Err(ProcessError::CurrableError {
         inner: CurrableError::CmAfterEmoji,

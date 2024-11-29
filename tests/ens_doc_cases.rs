@@ -38,25 +38,9 @@ lazy_static! {
         serde_json::from_str(include_str!("ens_cases.json")).unwrap();
 }
 
-fn only_cases(entries: &[Entry]) -> Vec<IndexedTestCase> {
-    entries
-        .iter()
-        .filter_map(|e| match e {
-            Entry::TestCase(t) => Some(t),
-            _ => None,
-        })
-        .enumerate()
-        .collect()
-}
-
 #[rstest]
-#[ignore = "requires a lot of time"]
 fn ens_tests() {
-    test_cases_parallel(
-        &only_cases(&ENS_TESTS), // .into_iter()
-                                 // .filter(|(i, _)| [35133].contains(i))
-                                 // .collect::<Vec<_>>(),
-    )
+    test_cases_parallel(&only_cases(&ENS_TESTS))
 }
 
 fn test_cases_parallel(cases: &[IndexedTestCase]) {
@@ -108,4 +92,15 @@ fn process_test_case(processor: &Processor, case: &TestCase) -> Result<(), anyho
     }
 
     Ok(())
+}
+
+fn only_cases(entries: &[Entry]) -> Vec<IndexedTestCase> {
+    entries
+        .iter()
+        .filter_map(|e| match e {
+            Entry::TestCase(t) => Some(t),
+            _ => None,
+        })
+        .enumerate()
+        .collect()
 }
