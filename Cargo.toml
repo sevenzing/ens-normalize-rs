@@ -3,10 +3,15 @@ name = "ens-normalize-rs"
 version = "0.1.0"
 edition = "2021"
 
+[profile.bench]
+debug = true
+
 [dependencies]
 anyhow = "1.0.93"
+emojis = "0.6.4"
 itertools = "0.13.0"
 lazy_static = "1.5.0"
+regex = "1.11.1"
 serde = { version = "1.0.215", features = ["derive"] }
 serde-aux = "4.5.0"
 serde_json = "1.0.133"

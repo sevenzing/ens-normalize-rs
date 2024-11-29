@@ -1,23 +1,27 @@
 use crate::{
-    code_points::constants, static_data::spec_json, utils, CodePoint, CodePointsSpecs,
+    constants, static_data::spec_json, utils, CodePoint, CodePointsSpecs, CollapsedEnsNameToken,
     CurrableError, DisallowedSequence, ParsedGroup, ParsedWholeValue, ProcessError, TokenizedLabel,
 };
 use std::collections::HashSet;
 
 pub type LabelType = spec_json::GroupName;
 
+/// Represents a validated ENS label as result of the `validate_label` function.
+/// Contains the original tokenized label and the type of the label.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidatedLabel {
     pub tokenized: TokenizedLabel,
     pub label_type: LabelType,
 }
 
-// https://docs.ens.domains/ensip/15#validate
+/// Validates a tokenized ENS label according to the ENSIP 15 specification
+/// https://docs.ens.domains/ensip/15#validate
 pub fn validate_label(
     label: TokenizedLabel,
     specs: &CodePointsSpecs,
 ) -> Result<ValidatedLabel, ProcessError> {
     non_empty(&label)?;
+    check_token_types(&label)?;
     if label.is_fully_emoji() {
         return Ok(ValidatedLabel {
             tokenized: label.clone(),
@@ -42,10 +46,23 @@ pub fn validate_label(
 }
 
 fn non_empty(label: &TokenizedLabel) -> Result<(), ProcessError> {
-    let non_ignored_token_exists = label.tokens.iter().any(|label| !label.ignored());
+    let non_ignored_token_exists = label.tokens.iter().any(|label| !label.is_ignored());
     if !non_ignored_token_exists {
         return Err(ProcessError::DisallowedSequence(
             DisallowedSequence::EmptyLabel,
+        ));
+    }
+    Ok(())
+}
+
+fn check_token_types(label: &TokenizedLabel) -> Result<(), ProcessError> {
+    if let Some(token) = label
+        .tokens
+        .iter()
+        .find(|token| token.is_disallowed() || token.is_stop())
+    {
+        return Err(ProcessError::DisallowedSequence(
+            DisallowedSequence::Invalid(utils::cps2str(&token.cps())),
         ));
     }
     Ok(())
@@ -120,7 +137,7 @@ fn check_fenced(label: &TokenizedLabel, specs: &CodePointsSpecs) -> Result<(), P
                 inner: CurrableError::FencedConsecutive,
                 index: i,
                 sequence: utils::cps2str(&[one, two]),
-                maybe_suggest: Some("".to_string()),
+                maybe_suggest: Some(utils::cp2str(one)),
             });
         }
     }
@@ -132,10 +149,10 @@ fn check_cm_leading_emoji(
     specs: &CodePointsSpecs,
 ) -> Result<(), ProcessError> {
     let mut index = 0;
-
-    for (i, token) in label.tokens.iter().enumerate() {
-        if token.is_text() {
-            if let Some(cp) = token.cps().first() {
+    let collapsed = label.collapse_into_text_or_emoji();
+    for (i, token) in collapsed.iter().enumerate() {
+        if let CollapsedEnsNameToken::Text(token) = token {
+            if let Some(cp) = token.cps.first() {
                 if specs.is_cm(*cp) {
                     if i == 0 {
                         return Err(ProcessError::CurrableError {
@@ -144,7 +161,7 @@ fn check_cm_leading_emoji(
                             sequence: utils::cps2str(&[*cp]),
                             maybe_suggest: Some("".to_string()),
                         });
-                    } else if label.tokens[i - 1].is_emoji() {
+                    } else {
                         return Err(ProcessError::CurrableError {
                             inner: CurrableError::CmAfterEmoji,
                             index,
@@ -155,7 +172,7 @@ fn check_cm_leading_emoji(
                 }
             }
         }
-        index += token.size();
+        index += token.input_size();
     }
 
     Ok(())
@@ -165,7 +182,7 @@ fn check_and_get_group(
     label: &TokenizedLabel,
     specs: &CodePointsSpecs,
 ) -> Result<ParsedGroup, ProcessError> {
-    let cps = label.get_only_text_cps();
+    let cps = label.get_cps_of_not_ignored_text();
     let unique_cps = cps
         .clone()
         .into_iter()

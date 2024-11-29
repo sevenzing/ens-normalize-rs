@@ -1,18 +1,20 @@
-use super::TokenDisallowed;
 use crate::{
-    code_points::constants,
+    constants,
     tokens::{
-        EnsNameToken, TokenEmoji, TokenIgnored, TokenMapped, TokenNfc, TokenStop, TokenValid,
+        CollapsedEnsNameToken, EnsNameToken, TokenDisallowed, TokenEmoji, TokenIgnored,
+        TokenMapped, TokenNfc, TokenStop, TokenValid,
     },
-    utils, CodePoint, CodePointsSpecs, DisallowedSequence, ProcessError,
+    utils, CodePoint, CodePointsSpecs, ProcessError,
 };
 
+/// Represents a full ENS name, including the original input and the sequence of tokenized labels
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenizedName {
     pub input: String,
     pub labels: Vec<TokenizedLabel>,
 }
 
+/// Represents a tokenized ENS label (part of a name separated by periods), including the original input and the sequence of tokens
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenizedLabel {
     pub input: String,
@@ -20,6 +22,69 @@ pub struct TokenizedLabel {
     pub cps: Vec<CodePoint>,
 }
 
+impl TokenizedLabel {
+    /// Returns true if all tokens in the label are emoji tokens
+    pub fn is_fully_emoji(&self) -> bool {
+        self.tokens
+            .iter()
+            .all(|t| matches!(t, EnsNameToken::Emoji(_)))
+    }
+
+    /// Returns true if all codepoints in all tokens are ASCII characters
+    pub fn is_fully_ascii(&self) -> bool {
+        self.tokens
+            .iter()
+            .all(|token| token.cps().into_iter().all(utils::is_ascii))
+    }
+
+    /// Collapses consecutive text tokens into single text tokens, keeping emoji tokens separate.
+    /// Returns a vector of either Text or Emoji tokens.
+    pub fn collapse_into_text_or_emoji(&self) -> Vec<CollapsedEnsNameToken> {
+        let mut current_text_cps = vec![];
+        let mut collapsed = vec![];
+        for token in self.tokens.iter() {
+            match token {
+                EnsNameToken::Valid(_) | EnsNameToken::Mapped(_) | EnsNameToken::Nfc(_) => {
+                    current_text_cps.extend(token.cps().iter());
+                }
+                EnsNameToken::Emoji(token) => {
+                    if !current_text_cps.is_empty() {
+                        collapsed.push(CollapsedEnsNameToken::Text(TokenValid {
+                            cps: current_text_cps,
+                        }));
+                        current_text_cps = vec![];
+                    }
+                    collapsed.push(CollapsedEnsNameToken::Emoji(token.clone()));
+                }
+                EnsNameToken::Ignored(_) | EnsNameToken::Disallowed(_) | EnsNameToken::Stop(_) => {}
+            }
+        }
+        if !current_text_cps.is_empty() {
+            collapsed.push(CollapsedEnsNameToken::Text(TokenValid {
+                cps: current_text_cps,
+            }));
+        }
+        collapsed
+    }
+
+    /// Returns a vector of codepoints from all text tokens, excluding emoji and ignored tokens
+    pub fn get_cps_of_not_ignored_text(&self) -> Vec<CodePoint> {
+        self.collapse_into_text_or_emoji()
+            .into_iter()
+            .filter_map(|token| {
+                if let CollapsedEnsNameToken::Text(token) = token {
+                    Some(token.cps)
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .collect()
+    }
+}
+
+/// Tokenizes a full ENS name by splitting on dots and tokenizing each label
+/// Returns a TokenizedName containing the original input and tokenized labels
 pub fn tokenize_name(
     name: impl AsRef<str>,
     specs: &CodePointsSpecs,
@@ -42,31 +107,35 @@ pub fn tokenize_name(
     })
 }
 
+/// Tokenizes a single ENS label into a sequence of tokens
+/// Handles emoji sequences and individual codepoints according to the specs
+/// Optionally applies NFC normalization
 pub fn tokenize_label(
     label: impl AsRef<str>,
     specs: &CodePointsSpecs,
     apply_nfc: bool,
 ) -> Result<TokenizedLabel, ProcessError> {
     let label = label.as_ref();
-    let chars = label.chars().collect::<Vec<_>>();
+    let emojis = specs.finditer_emoji(label).collect::<Vec<_>>();
 
     let mut tokens = Vec::new();
-    let mut i = 0;
+    let mut input_cur = 0;
 
-    while i < chars.len() {
-        if let Some(emoji) = maybe_starts_with_emoji(&chars[i..], specs) {
-            let cps_taken = emoji.input.len();
+    while input_cur < label.len() {
+        if let Some(emoji) = maybe_starts_with_emoji(input_cur, label, &emojis, specs) {
+            let cursor_offset = emoji.input.len();
             tokens.push(EnsNameToken::Emoji(emoji));
-            i += cps_taken;
+            input_cur += cursor_offset;
         } else {
-            let token = process_one_cp(chars[i] as CodePoint, specs);
-            if let EnsNameToken::Disallowed(t) = token {
-                return Err(ProcessError::DisallowedSequence(
-                    DisallowedSequence::Invalid(utils::cp2str(t.cp)),
-                ));
-            }
+            let char = label[input_cur..]
+                .chars()
+                .next()
+                .expect("input_cur is in bounds");
+            let cursor_offset = char.len_utf8();
+            let cp = char as CodePoint;
+            let token = process_one_cp(cp, specs);
             tokens.push(token);
-            i += 1;
+            input_cur += cursor_offset;
         }
     }
 
@@ -153,25 +222,32 @@ fn perform_nfc_transform(tokens: &mut Vec<EnsNameToken>, specs: &CodePointsSpecs
 
 // given array of codepoints
 // returns the longest valid emoji sequence (or undefined if no match)
-fn maybe_starts_with_emoji(chars: &[char], specs: &CodePointsSpecs) -> Option<TokenEmoji> {
-    let mut longest_match = None;
-    let cps: Vec<CodePoint> = chars.iter().map(|c| *c as u32).collect();
-
-    for i in 1..=chars.len() {
-        let candidate = &cps[0..i];
-        if specs.cps_is_emoji(candidate) {
-            let input = candidate.to_vec();
-            let cps_no_fe0f = utils::filter_fe0f(&input);
-            let emoji = specs.cps_emoji_no_fe0f_to_pretty(&cps_no_fe0f);
-
-            longest_match = Some(TokenEmoji {
-                input,
+fn maybe_starts_with_emoji(
+    i: usize,
+    label: &str,
+    emojis: &[regex::Match],
+    specs: &CodePointsSpecs,
+) -> Option<TokenEmoji> {
+    emojis.iter().find_map(|emoji| {
+        let start = emoji.start();
+        if start == i {
+            let end = emoji.end();
+            let input_cps = utils::str2cps(&label[start..end]);
+            let cps_no_fe0f = utils::filter_fe0f(&input_cps);
+            let emoji = specs
+                .cps_emoji_no_fe0f_to_pretty(&cps_no_fe0f)
+                .expect("emoji should be found")
+                .clone();
+            Some(TokenEmoji {
+                input: label[start..end].to_string(),
+                cps_input: input_cps,
                 emoji,
-                cps: cps_no_fe0f,
-            });
+                cps_no_fe0f,
+            })
+        } else {
+            None
         }
-    }
-    longest_match
+    })
 }
 
 fn process_one_cp(cp: CodePoint, specs: &CodePointsSpecs) -> EnsNameToken {
@@ -188,34 +264,6 @@ fn process_one_cp(cp: CodePoint, specs: &CodePointsSpecs) -> EnsNameToken {
         })
     } else {
         EnsNameToken::Disallowed(TokenDisallowed { cp })
-    }
-}
-
-impl TokenizedLabel {
-    pub fn is_fully_emoji(&self) -> bool {
-        self.tokens
-            .iter()
-            .all(|t| matches!(t, EnsNameToken::Emoji(_)))
-    }
-
-    pub fn is_fully_ascii(&self) -> bool {
-        self.tokens
-            .iter()
-            .all(|token| token.cps().into_iter().all(utils::is_ascii))
-    }
-
-    pub fn get_only_text_cps(&self) -> Vec<CodePoint> {
-        self.tokens
-            .iter()
-            .filter_map(|token| {
-                if token.is_text() {
-                    Some(token.cps())
-                } else {
-                    None
-                }
-            })
-            .flatten()
-            .collect()
     }
 }
 
@@ -298,11 +346,12 @@ mod tests {
 
     #[rstest]
     #[case::xyz(
-        "xyz👨🏻",
+        "xyz👨🏻/",
         true,
         vec![
             EnsNameToken::Valid(TokenValid { cps: vec![120, 121, 122] }),
-            EnsNameToken::Emoji(TokenEmoji { input: vec![128104, 127995], emoji: vec![128104, 127995], cps: vec![128104, 127995] }),
+            EnsNameToken::Emoji(TokenEmoji { input: "👨🏻".to_string(), cps_input: vec![128104, 127995], emoji: vec![128104, 127995], cps_no_fe0f: vec![128104, 127995] }),
+            EnsNameToken::Disallowed(TokenDisallowed { cp: 47 }),
         ]
     )]
     #[case::a_poop_b(
@@ -310,7 +359,7 @@ mod tests {
         true,
         vec![
             EnsNameToken::Mapped(TokenMapped { cp: 65, cps: vec![97] }),
-            EnsNameToken::Emoji(TokenEmoji { input: vec![128169], emoji: vec![128169, 65039], cps: vec![128169] }),
+            EnsNameToken::Emoji(TokenEmoji { input: "💩".to_string(), cps_input: vec![128169], emoji: vec![128169, 65039], cps_no_fe0f: vec![128169] }),
             EnsNameToken::Ignored(TokenIgnored { cp: 65038 }),
             EnsNameToken::Ignored(TokenIgnored { cp: 65038 }),
             EnsNameToken::Valid(TokenValid { cps: vec![98] }),
@@ -331,7 +380,7 @@ mod tests {
         vec![
             EnsNameToken::Valid(TokenValid { cps: vec![95] }),
             EnsNameToken::Mapped(TokenMapped { cp: 82, cps: vec![114] }),
-            EnsNameToken::Emoji(TokenEmoji { input: vec![128169, 65039], emoji: vec![128169, 65039], cps: vec![128169] }),
+            EnsNameToken::Emoji(TokenEmoji { input: "💩️".to_string(), cps_input: vec![128169, 65039], emoji: vec![128169, 65039], cps_no_fe0f: vec![128169] }),
             EnsNameToken::Valid(TokenValid { cps: vec![97] }),
             EnsNameToken::Ignored(TokenIgnored { cp: 65039 }),
             EnsNameToken::Valid(TokenValid { cps: vec![772] }),
@@ -345,7 +394,7 @@ mod tests {
         vec![
             EnsNameToken::Valid(TokenValid { cps: vec![95] }),
             EnsNameToken::Mapped(TokenMapped { cp: 82, cps: vec![114] }),
-            EnsNameToken::Emoji(TokenEmoji { input: vec![128169, 65039], emoji: vec![128169, 65039], cps: vec![128169] }),
+            EnsNameToken::Emoji(TokenEmoji { input: "💩️".to_string(), cps_input: vec![128169, 65039], emoji: vec![128169, 65039], cps_no_fe0f: vec![128169] }),
             EnsNameToken::Nfc(TokenNfc { input: vec![97, 772], cps: vec![257] }),
             EnsNameToken::Ignored(TokenIgnored { cp: 173 }),
             EnsNameToken::Stop(TokenStop { cp: 46 }),
@@ -360,31 +409,53 @@ mod tests {
             EnsNameToken::Mapped(TokenMapped { cp: 70, cps: vec![102] }),
             EnsNameToken::Mapped(TokenMapped { cp: 70, cps: vec![102] }),
             EnsNameToken::Mapped(TokenMapped { cp: 89, cps: vec![121] }),
-            EnsNameToken::Emoji(TokenEmoji { input: vec![128692, 8205, 9794, 65039], emoji: vec![128692, 8205, 9794, 65039], cps: vec![128692, 8205, 9794] }),
+            EnsNameToken::Emoji(TokenEmoji { input: "🚴\u{200d}♂\u{fe0f}".to_string(), cps_input: vec![128692, 8205, 9794, 65039], emoji: vec![128692, 8205, 9794, 65039], cps_no_fe0f: vec![128692, 8205, 9794] }),
             EnsNameToken::Stop(TokenStop { cp: 46 }),
             EnsNameToken::Valid(TokenValid { cps: vec![101] }),
             EnsNameToken::Mapped(TokenMapped { cp: 84, cps: vec![116] }),
             EnsNameToken::Valid(TokenValid { cps: vec![104] }),
         ]
     )]
+    #[case::emojis(
+        "⛹️‍♀",
+        true,
+        vec![
+            EnsNameToken::Emoji(TokenEmoji { input: "⛹️‍♀".to_string(), cps_input: vec![9977, 65039, 8205, 9792], emoji: vec![9977, 65039, 8205, 9792, 65039], cps_no_fe0f: vec![9977, 8205, 9792] }),
+        ]
+    )]
     fn test_ens_tokenize(
         #[case] input: &str,
-        #[case] normalize: bool,
+        #[case] apply_nfc: bool,
         #[case] expected: Vec<EnsNameToken>,
         specs: &CodePointsSpecs,
     ) {
-        let result = tokenize_label(input, specs, normalize).expect("tokenize");
+        let result = tokenize_label(input, specs, apply_nfc).expect("tokenize");
         assert_eq!(result.tokens, expected);
     }
 
     #[rstest]
-    #[case::disallowed("/", false)]
-    fn test_ens_tokenize_disallowed(
+    #[case::leading_cm(
+        "󠅑𑆻👱🏿‍♀️xyz",
+        vec![
+            CollapsedEnsNameToken::Text(TokenValid { cps: vec![70075] }),
+            CollapsedEnsNameToken::Emoji(TokenEmoji { input: "👱🏿‍♀️".to_string(), cps_input: vec![128113, 127999, 8205, 9792, 65039], emoji: vec![128113, 127999, 8205, 9792, 65039], cps_no_fe0f: vec![128113, 127999, 8205, 9792] }),
+            CollapsedEnsNameToken::Text(TokenValid { cps: vec![120, 121, 122] }),
+        ]
+    )]
+    #[case::atm(
+        "a™️",
+        vec![
+            CollapsedEnsNameToken::Text(TokenValid { cps: vec![97, 116, 109] }),
+        ]
+    )]
+    fn test_collapse(
         #[case] input: &str,
-        #[case] normalize: bool,
+        #[case] expected: Vec<CollapsedEnsNameToken>,
         specs: &CodePointsSpecs,
     ) {
-        let result = tokenize_label(input, specs, normalize);
-        result.expect_err("should be disallowed");
+        let result = tokenize_label(input, specs, true)
+            .expect("tokenize")
+            .collapse_into_text_or_emoji();
+        assert_eq!(result, expected);
     }
 }

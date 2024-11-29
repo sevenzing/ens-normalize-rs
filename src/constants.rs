@@ -13,3 +13,5 @@ pub const CP_UNDERSCORE: CodePoint = 0x5F;
 pub const CP_HYPHEN: CodePoint = 0x2D;
 
 pub const GREEK_GROUP_NAME: &str = "Greek";
+pub const MAX_EMOJI_LEN: usize = 0x2d;
+pub const STR_FEOF: &str = "\u{fe0f}";

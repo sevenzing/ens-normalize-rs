@@ -31,48 +31,38 @@ pub struct TestCase {
     norm: Option<String>,
 }
 
+pub type IndexedTestCase<'a> = (usize, &'a TestCase);
+
 lazy_static! {
     pub static ref ENS_TESTS: Vec<Entry> =
         serde_json::from_str(include_str!("ens_cases.json")).unwrap();
 }
 
-fn only_cases(entries: &[Entry]) -> Vec<&TestCase> {
+fn only_cases(entries: &[Entry]) -> Vec<IndexedTestCase> {
     entries
         .iter()
         .filter_map(|e| match e {
             Entry::TestCase(t) => Some(t),
             _ => None,
         })
+        .enumerate()
         .collect()
 }
 
 #[rstest]
+#[ignore = "requires a lot of time"]
 fn ens_tests() {
-    test_cases_parallel(&only_cases(&ENS_TESTS))
+    test_cases_parallel(
+        &only_cases(&ENS_TESTS), // .into_iter()
+                                 // .filter(|(i, _)| [35133].contains(i))
+                                 // .collect::<Vec<_>>(),
+    )
 }
 
-#[rstest]
-#[ignore = "for debugging"]
-fn ens_test_debug() {
-    test_cases(&[&TestCase {
-        name: "🅰🅱🅲".to_string(),
-        comment: Some("negative squared (A-Z)".to_string()),
-        ..Default::default()
-    }])
-}
-
-fn test_cases(cases: &[&TestCase]) {
-    let processor = Processor::default();
-    for case in cases {
-        process_test_case(&processor, case).expect("case failed");
-    }
-}
-
-fn test_cases_parallel(cases: &[&TestCase]) {
+fn test_cases_parallel(cases: &[IndexedTestCase]) {
     let processor = Processor::default();
     let results = cases
-        .par_iter()
-        .enumerate() // Parallel iterator from Rayon
+        .par_iter() // Parallel iterator from Rayon
         .map(|(i, test_case)| (i, process_test_case(&processor, test_case)))
         .filter_map(|(i, r)| r.err().map(|e| (i, e)))
         .collect::<Vec<_>>();
@@ -89,6 +79,7 @@ fn test_cases_parallel(cases: &[&TestCase]) {
 
 fn process_test_case(processor: &Processor, case: &TestCase) -> Result<(), anyhow::Error> {
     let test_name = match (case.comment.as_ref(), case.name.as_str()) {
+        (Some(comment), name) if name.len() < 64 => format!("{comment} (`{name}`)"),
         (Some(comment), _) => comment.clone(),
         (None, name) => name.to_string(),
     };

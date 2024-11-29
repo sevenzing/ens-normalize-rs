@@ -1,16 +1,19 @@
-use super::{constants, types::*};
+use super::types::*;
 use crate::{
+    constants,
     static_data::{
         nf_json,
         spec_json::{self, GroupName},
     },
     utils, CodePoint,
 };
+use regex::Regex;
 use std::collections::{HashMap, HashSet};
 
+
+/// This struct contains logic for validating and normalizing code points.
 pub struct CodePointsSpecs {
     cm: HashSet<CodePoint>,
-    emoji: HashSet<Vec<CodePoint>>,
     ignored: HashSet<CodePoint>,
     mapped: HashMap<CodePoint, Vec<CodePoint>>,
     nfc_check: HashSet<CodePoint>,
@@ -23,6 +26,7 @@ pub struct CodePointsSpecs {
     nsm_max: u32,
     emoji_no_fe0f_to_pretty: HashMap<Vec<CodePoint>, Vec<CodePoint>>,
     decomp: HashMap<CodePoint, Vec<CodePoint>>,
+    emoji_regex: Regex,
 }
 
 impl CodePointsSpecs {
@@ -46,9 +50,15 @@ impl CodePointsSpecs {
         let valid = compute_valid(&groups, &decomp);
         let whole_map = compute_whole_map(spec.whole_map);
 
+        let emoji_str_list = emoji
+            .iter()
+            .map(|cps| utils::cps2str(cps))
+            .collect::<Vec<_>>();
+        let emoji_regex =
+            create_emoji_regex_pattern(emoji_str_list).expect("failed to create emoji regex");
+
         Self {
             cm: spec.cm.into_iter().collect(),
-            emoji,
             emoji_no_fe0f_to_pretty,
             ignored: spec.ignored.into_iter().collect(),
             mapped: spec.mapped.into_iter().map(|m| (m.from, m.to)).collect(),
@@ -61,6 +71,7 @@ impl CodePointsSpecs {
             decomp,
             whole_map,
             group_name_to_index,
+            emoji_regex,
         }
     }
 }
@@ -79,18 +90,23 @@ impl CodePointsSpecs {
     }
 
     pub fn cps_is_emoji(&self, cps: &[CodePoint]) -> bool {
-        self.emoji.contains(cps) || self.emoji_no_fe0f_to_pretty.contains_key(cps)
+        let s = utils::cps2str(cps);
+        let maybe_match = self.finditer_emoji(&s).next();
+        maybe_match
+            .map(|m| m.start() == 0 && m.end() == s.len())
+            .unwrap_or(false)
+    }
+
+    pub fn finditer_emoji<'a>(&'a self, s: &'a str) -> impl Iterator<Item = regex::Match<'_>> {
+        self.emoji_regex.find_iter(s)
     }
 
     pub fn cps_requires_check(&self, cps: &[CodePoint]) -> bool {
         cps.iter().any(|cp| self.nfc_check.contains(cp))
     }
 
-    pub fn cps_emoji_no_fe0f_to_pretty(&self, cps: &[CodePoint]) -> Vec<CodePoint> {
-        self.emoji_no_fe0f_to_pretty
-            .get(cps)
-            .cloned()
-            .unwrap_or_default()
+    pub fn cps_emoji_no_fe0f_to_pretty(&self, cps: &[CodePoint]) -> Option<&Vec<CodePoint>> {
+        self.emoji_no_fe0f_to_pretty.get(cps)
     }
 
     pub fn maybe_normalize(&self, cp: CodePoint) -> Option<&Vec<CodePoint>> {
@@ -173,9 +189,31 @@ fn compute_whole_map(whole_map: HashMap<String, spec_json::WholeValue>) -> Parse
         .collect()
 }
 
+fn create_emoji_regex_pattern(emojis: Vec<impl AsRef<str>>) -> Result<Regex, regex::Error> {
+    let fe0f = regex::escape(constants::STR_FEOF);
+
+    // Make FE0F optional
+    let make_emoji = |emoji: &str| regex::escape(emoji).replace(&fe0f, &format!("{}?", fe0f));
+
+    // Order emojis to match the longest ones first
+    let order = |emoji: &str| emoji.replace(constants::STR_FEOF, "").len();
+
+    let mut sorted_emojis = emojis;
+    sorted_emojis.sort_by_key(|b| std::cmp::Reverse(order(b.as_ref())));
+
+    let emoji_regex = sorted_emojis
+        .into_iter()
+        .map(|emoji| make_emoji(emoji.as_ref()))
+        .collect::<Vec<_>>()
+        .join("|");
+
+    regex::Regex::new(&emoji_regex)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
     use rstest::{fixture, rstest};
 
     #[fixture]
@@ -205,10 +243,20 @@ mod tests {
     }
 
     #[rstest]
-    #[case::man_technologist("👨‍💻")]
-    fn test_emoji(#[case] emoji: &str, specs: &CodePointsSpecs) {
-        let cps = emoji.chars().map(|c| c as u32).collect::<Vec<_>>();
-        assert!(specs.cps_is_emoji(&cps), "Emoji {emoji} not found");
+    #[case::string("hello😀", vec![("😀", 5, 9)])]
+    #[case::man_technologist("👨‍💻", vec![("👨‍💻", 0, 11)])]
+    fn test_emoji(
+        #[case] emoji: &str,
+        #[case] expected: Vec<(&str, usize, usize)>,
+        specs: &CodePointsSpecs,
+    ) {
+        let matches = specs.finditer_emoji(emoji).collect::<Vec<_>>();
+        assert_eq!(matches.len(), expected.len());
+        for (i, (emoji, start, end)) in expected.into_iter().enumerate() {
+            assert_eq!(matches[i].as_str(), emoji);
+            assert_eq!(matches[i].start(), start);
+            assert_eq!(matches[i].end(), end);
+        }
     }
 
     #[rstest]

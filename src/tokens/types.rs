@@ -17,31 +17,46 @@ impl EnsNameToken {
             EnsNameToken::Valid(t) => t.cps.clone(),
             EnsNameToken::Mapped(t) => t.cps.clone(),
             EnsNameToken::Nfc(t) => t.cps.clone(),
-            EnsNameToken::Emoji(t) => t.cps.clone(),
-            _ => vec![],
+            EnsNameToken::Emoji(t) => t.cps_no_fe0f.clone(),
+            EnsNameToken::Disallowed(t) => vec![t.cp],
+            EnsNameToken::Stop(t) => vec![t.cp],
+            EnsNameToken::Ignored(t) => vec![t.cp],
         }
     }
 
-    pub fn size(&self) -> usize {
+    pub fn input_size(&self) -> usize {
         match self {
             EnsNameToken::Valid(t) => t.cps.len(),
-            EnsNameToken::Mapped(t) => t.cps.len(),
-            EnsNameToken::Nfc(t) => t.cps.len(),
-            EnsNameToken::Emoji(t) => t.cps.len(),
-            _ => 0,
+            EnsNameToken::Nfc(t) => t.input.len(),
+            EnsNameToken::Emoji(t) => t.cps_input.len(),
+            EnsNameToken::Mapped(_) => 1,
+            EnsNameToken::Disallowed(_) => 1,
+            EnsNameToken::Ignored(_) => 1,
+            EnsNameToken::Stop(_) => 1,
         }
     }
 
     pub fn is_text(&self) -> bool {
-        !self.is_emoji()
+        matches!(
+            self,
+            EnsNameToken::Valid(_) | EnsNameToken::Mapped(_) | EnsNameToken::Nfc(_)
+        )
     }
 
     pub fn is_emoji(&self) -> bool {
         matches!(self, EnsNameToken::Emoji(_))
     }
 
-    pub fn ignored(&self) -> bool {
+    pub fn is_ignored(&self) -> bool {
         matches!(self, EnsNameToken::Ignored(_))
+    }
+
+    pub fn is_disallowed(&self) -> bool {
+        matches!(self, EnsNameToken::Disallowed(_))
+    }
+
+    pub fn is_stop(&self) -> bool {
+        matches!(self, EnsNameToken::Stop(_))
     }
 }
 
@@ -76,7 +91,23 @@ pub struct TokenNfc {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenEmoji {
-    pub input: Vec<CodePoint>,
+    pub input: String,
     pub emoji: Vec<CodePoint>,
-    pub cps: Vec<CodePoint>,
+    pub cps_input: Vec<CodePoint>,
+    pub cps_no_fe0f: Vec<CodePoint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CollapsedEnsNameToken {
+    Text(TokenValid),
+    Emoji(TokenEmoji),
+}
+
+impl CollapsedEnsNameToken {
+    pub fn input_size(&self) -> usize {
+        match self {
+            CollapsedEnsNameToken::Text(t) => t.cps.len(),
+            CollapsedEnsNameToken::Emoji(t) => t.cps_input.len(),
+        }
+    }
 }

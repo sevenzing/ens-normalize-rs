@@ -17,8 +17,6 @@ pub enum ProcessError {
 
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum CurrableError {
-    #[error("disallowed")]
-    Disallowed,
     #[error("underscore in middle")]
     UnderscoreInMiddle,
     #[error("hyphen at second and third position")]
