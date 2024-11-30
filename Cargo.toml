@@ -2,6 +2,12 @@
 name = "ens-normalize-rs"
 version = "0.1.0"
 edition = "2021"
+description = "Ethereum Name Service (ENS) name normalization"
+license = "MIT"
+repository = "https://github.com/sevenzing/ens-normalize-rs"
+authors = ["sevenzing <its@llev.me>"]
+readme = "README.md"
+
 
 [profile.bench]
 debug = true
