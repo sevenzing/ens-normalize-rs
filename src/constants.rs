@@ -14,4 +14,4 @@ pub const CP_HYPHEN: CodePoint = 0x2D;
 
 pub const GREEK_GROUP_NAME: &str = "Greek";
 pub const MAX_EMOJI_LEN: usize = 0x2d;
-pub const STR_FEOF: &str = "\u{fe0f}";
+pub const STR_FE0F: &str = "\u{fe0f}";

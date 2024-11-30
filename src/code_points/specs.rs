@@ -189,13 +189,13 @@ fn compute_whole_map(whole_map: HashMap<String, spec_json::WholeValue>) -> Parse
 }
 
 fn create_emoji_regex_pattern(emojis: Vec<impl AsRef<str>>) -> Result<Regex, regex::Error> {
-    let fe0f = regex::escape(constants::STR_FEOF);
+    let fe0f = regex::escape(constants::STR_FE0F);
 
     // Make FE0F optional
     let make_emoji = |emoji: &str| regex::escape(emoji).replace(&fe0f, &format!("{}?", fe0f));
 
     // Order emojis to match the longest ones first
-    let order = |emoji: &str| emoji.replace(constants::STR_FEOF, "").len();
+    let order = |emoji: &str| emoji.replace(constants::STR_FE0F, "").len();
 
     let mut sorted_emojis = emojis;
     sorted_emojis.sort_by_key(|b| std::cmp::Reverse(order(b.as_ref())));

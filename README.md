@@ -25,7 +25,7 @@ ens-normalize-rs = "0.1.0"
 
 ```rust
 fn main() {
-    // Using processor to reuse reloaded data
+    // Using processor to reuse preloaded data
     let processor = ens_normalize_rs::Processor::default();
     let name = "🅰️🅱.eth";
     let processed = processor.process(name).unwrap();

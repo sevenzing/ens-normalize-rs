@@ -29,7 +29,6 @@ pub struct Spec {
     pub ignored: Vec<CodePoint>,
     pub mapped: Vec<Mapped>,
     pub fenced: Vec<Fenced>,
-    //pub wholes: Vec<Whole>,
     pub cm: Vec<CodePoint>,
     pub nsm: Vec<CodePoint>,
     pub nsm_max: u32,
