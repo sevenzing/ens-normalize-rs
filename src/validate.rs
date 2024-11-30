@@ -1,30 +1,45 @@
 use crate::{
     constants, static_data::spec_json, utils, CodePoint, CodePointsSpecs, CollapsedEnsNameToken,
-    CurrableError, DisallowedSequence, ParsedGroup, ParsedWholeValue, ProcessError, TokenizedLabel,
+    CurrableError, DisallowedSequence, EnsNameToken, ParsedGroup, ParsedWholeValue, ProcessError,
+    TokenizedLabel, TokenizedName,
 };
+use itertools::Itertools;
 use std::collections::HashSet;
-
 pub type LabelType = spec_json::GroupName;
 
 /// Represents a validated ENS label as result of the `validate_label` function.
 /// Contains the original tokenized label and the type of the label.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidatedLabel {
-    pub tokenized: TokenizedLabel,
+    pub tokens: Vec<EnsNameToken>,
     pub label_type: LabelType,
+}
+
+pub fn validate_name(
+    name: &TokenizedName,
+    specs: &CodePointsSpecs,
+) -> Result<Vec<ValidatedLabel>, ProcessError> {
+    if name.is_empty() {
+        return Ok(vec![]);
+    }
+    let labels = name
+        .iter_labels()
+        .map(|label| validate_label(label, specs))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(labels)
 }
 
 /// Validates a tokenized ENS label according to the ENSIP 15 specification
 /// https://docs.ens.domains/ensip/15#validate
 pub fn validate_label(
-    label: TokenizedLabel,
+    label: TokenizedLabel<'_>,
     specs: &CodePointsSpecs,
 ) -> Result<ValidatedLabel, ProcessError> {
     non_empty(&label)?;
     check_token_types(&label)?;
     if label.is_fully_emoji() {
         return Ok(ValidatedLabel {
-            tokenized: label.clone(),
+            tokens: label.tokens.to_owned(),
             label_type: LabelType::Emoji,
         });
     };
@@ -32,7 +47,7 @@ pub fn validate_label(
     if label.is_fully_ascii() {
         no_hyphen_at_second_and_third(&label)?;
         return Ok(ValidatedLabel {
-            tokenized: label.clone(),
+            tokens: label.tokens.to_owned(),
             label_type: LabelType::Ascii,
         });
     }
@@ -40,13 +55,13 @@ pub fn validate_label(
     check_cm_leading_emoji(&label, specs)?;
     let group = check_and_get_group(&label, specs)?;
     Ok(ValidatedLabel {
-        tokenized: label,
+        tokens: label.tokens.to_owned(),
         label_type: group.name,
     })
 }
 
 fn non_empty(label: &TokenizedLabel) -> Result<(), ProcessError> {
-    let non_ignored_token_exists = label.tokens.iter().any(|label| !label.is_ignored());
+    let non_ignored_token_exists = label.tokens.iter().any(|token| !token.is_ignored());
     if !non_ignored_token_exists {
         return Err(ProcessError::DisallowedSequence(
             DisallowedSequence::EmptyLabel,
@@ -70,16 +85,14 @@ fn check_token_types(label: &TokenizedLabel) -> Result<(), ProcessError> {
 
 fn underscore_only_at_beginning(label: &TokenizedLabel) -> Result<(), ProcessError> {
     let leading_underscores = label
-        .cps
-        .iter()
-        .take_while(|cp| **cp == constants::CP_UNDERSCORE)
+        .iter_cps()
+        .take_while(|cp| *cp == constants::CP_UNDERSCORE)
         .count();
     let underscore_in_middle = label
-        .cps
-        .iter()
+        .iter_cps()
         .enumerate()
         .skip(leading_underscores)
-        .find(|(_, cp)| **cp == constants::CP_UNDERSCORE);
+        .find(|(_, cp)| *cp == constants::CP_UNDERSCORE);
     if let Some((index, _)) = underscore_in_middle {
         return Err(ProcessError::CurrableError {
             inner: CurrableError::UnderscoreInMiddle,
@@ -95,8 +108,8 @@ fn underscore_only_at_beginning(label: &TokenizedLabel) -> Result<(), ProcessErr
 // Must not match /^..--/
 // Examples: "ab-c" and "---a"are valid, "xn--" and ---- are invalid.
 fn no_hyphen_at_second_and_third(label: &TokenizedLabel) -> Result<(), ProcessError> {
-    if label.cps.get(2) == Some(&constants::CP_HYPHEN)
-        && label.cps.get(3) == Some(&constants::CP_HYPHEN)
+    if label.iter_cps().nth(2) == Some(constants::CP_HYPHEN)
+        && label.iter_cps().nth(3) == Some(constants::CP_HYPHEN)
     {
         return Err(ProcessError::CurrableError {
             inner: CurrableError::HyphenAtSecondAndThird,
@@ -109,29 +122,29 @@ fn no_hyphen_at_second_and_third(label: &TokenizedLabel) -> Result<(), ProcessEr
 }
 
 fn check_fenced(label: &TokenizedLabel, specs: &CodePointsSpecs) -> Result<(), ProcessError> {
-    if let Some(first_cp) = label.cps.first() {
-        if specs.is_fenced(*first_cp) {
+    if let Some(first_cp) = label.iter_cps().next() {
+        if specs.is_fenced(first_cp) {
             return Err(ProcessError::CurrableError {
                 inner: CurrableError::FencedLeading,
                 index: 0,
-                sequence: utils::cps2str(&[*first_cp]),
+                sequence: utils::cps2str(&[first_cp]),
                 maybe_suggest: Some("".to_string()),
             });
         }
     }
-    if let Some(last_cp) = label.cps.last() {
-        if specs.is_fenced(*last_cp) {
+    if let Some(last_cp) = label.iter_cps().last() {
+        if specs.is_fenced(last_cp) {
             return Err(ProcessError::CurrableError {
                 inner: CurrableError::FencedTrailing,
-                index: label.cps.len() - 1,
-                sequence: utils::cps2str(&[*last_cp]),
+                index: label.iter_cps().count() - 1,
+                sequence: utils::cps2str(&[last_cp]),
                 maybe_suggest: Some("".to_string()),
             });
         }
     }
 
-    for (i, window) in label.cps.windows(2).enumerate() {
-        let (one, two) = (window[0], window[1]);
+    for (i, window) in label.iter_cps().tuple_windows().enumerate() {
+        let (one, two) = window;
         if specs.is_fenced(one) && specs.is_fenced(two) {
             return Err(ProcessError::CurrableError {
                 inner: CurrableError::FencedConsecutive,
@@ -308,8 +321,9 @@ fn determine_group<'a>(
 
 #[cfg(test)]
 mod tests {
+    use crate::TokenizedName;
+
     use super::*;
-    use crate::tokenize_label;
     use pretty_assertions::assert_eq;
     use rstest::{fixture, rstest};
 
@@ -362,7 +376,8 @@ mod tests {
         #[case] expected: Result<LabelType, ProcessError>,
         specs: &CodePointsSpecs,
     ) {
-        let label = tokenize_label(input, specs, true).unwrap();
+        let name = TokenizedName::from_input(input, specs, true).unwrap();
+        let label = name.iter_labels().next().unwrap();
         let result = validate_label(label, specs);
         assert_eq!(
             result.clone().map(|v| v.label_type),

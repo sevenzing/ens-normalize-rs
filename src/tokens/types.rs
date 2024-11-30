@@ -1,5 +1,7 @@
-use crate::CodePoint;
+use crate::{constants, utils, CodePoint};
 
+/// Represents a token in an ENS name.
+/// see https://docs.ens.domains/ensip/15#tokenize for more details.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EnsNameToken {
     Valid(TokenValid),
@@ -57,6 +59,16 @@ impl EnsNameToken {
 
     pub fn is_stop(&self) -> bool {
         matches!(self, EnsNameToken::Stop(_))
+    }
+
+    pub fn stop() -> Self {
+        Self::Stop(TokenStop {
+            cp: constants::CP_STOP,
+        })
+    }
+
+    pub fn as_string(&self) -> String {
+        utils::cps2str(&self.cps())
     }
 }
 

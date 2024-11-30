@@ -1,14 +1,15 @@
 use crate::{constants, join::join_cps, CodePoint, EnsNameToken, LabelType, ValidatedLabel};
 
-/// Beautifies a list of validated labels by replacing Greek code points with their pretty variants.
-pub fn beautify_labels(labels: Vec<ValidatedLabel>) -> String {
-    let labels_cps = labels.into_iter().map(|label| {
+/// Beautifies a list of validated labels by
+/// - replacing Greek code points with their pretty variants
+/// - using pretty variants of emojis
+pub fn beautify_labels(labels: &[ValidatedLabel]) -> String {
+    let labels_cps = labels.iter().map(|label| {
         label
-            .tokenized
             .tokens
-            .into_iter()
+            .iter()
             .filter_map(|token| match token {
-                EnsNameToken::Emoji(emoji) => Some(emoji.emoji),
+                EnsNameToken::Emoji(emoji) => Some(emoji.emoji.clone()),
                 EnsNameToken::Valid(_) | EnsNameToken::Mapped(_) | EnsNameToken::Nfc(_) => {
                     Some(cps_replaced_greek(token.cps(), &label.label_type))
                 }

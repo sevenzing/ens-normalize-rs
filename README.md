@@ -66,7 +66,8 @@ cargo test
 - [x] ENSIP-15 Validation Tests
 - [ ] Unicode Normalization Tests
 - [ ] CLI to update `specs.json` and `nf.json`
-- [ ] [ens_cure](https://github.com/namehash/ens-normalize-python?tab=readme-ov-file#ens_cure) analog function
+- [ ] analog of [ens_cure](https://github.com/namehash/ens-normalize-python?tab=readme-ov-file#ens_cure) function
+- [ ] analog of [ens_normalizations](https://github.com/namehash/ens-normalize-python/tree/main?tab=readme-ov-file#ens_normalizations) function
 
 
 ## License

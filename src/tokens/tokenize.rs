@@ -1,5 +1,4 @@
 use crate::{
-    constants,
     tokens::{
         CollapsedEnsNameToken, EnsNameToken, TokenDisallowed, TokenEmoji, TokenIgnored,
         TokenMapped, TokenNfc, TokenStop, TokenValid,
@@ -7,22 +6,67 @@ use crate::{
     utils, CodePoint, CodePointsSpecs, ProcessError,
 };
 
-/// Represents a full ENS name, including the original input and the sequence of tokenized labels
+/// Represents a full ENS name, including the original input and the sequence of tokens
+/// vitalik.eth
+/// ^^^^^^^^^^^
+/// name
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenizedName {
     pub input: String,
-    pub labels: Vec<TokenizedLabel>,
-}
-
-/// Represents a tokenized ENS label (part of a name separated by periods), including the original input and the sequence of tokens
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TokenizedLabel {
-    pub input: String,
     pub tokens: Vec<EnsNameToken>,
-    pub cps: Vec<CodePoint>,
 }
 
-impl TokenizedLabel {
+/// Represents a tokenized ENS label (part of a name separated by periods), including sequence of tokens
+/// vitalik.eth
+/// ^^^^^^^
+/// label 1
+///         ^^^
+///         label 2
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TokenizedLabel<'a> {
+    pub tokens: &'a [EnsNameToken],
+}
+
+impl TokenizedName {
+    pub fn empty() -> Self {
+        Self {
+            input: "".to_string(),
+            tokens: vec![],
+        }
+    }
+
+    /// Tokenizes an input string, applying NFC normalization if requested.
+    pub fn from_input(
+        input: impl AsRef<str>,
+        specs: &CodePointsSpecs,
+        apply_nfc: bool,
+    ) -> Result<Self, ProcessError> {
+        tokenize_name(input, specs, apply_nfc)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tokens.is_empty()
+    }
+
+    /// Returns an iterator over all tokens in the tokenized name.
+    pub fn iter_tokens(&self) -> impl Iterator<Item = &EnsNameToken> {
+        self.tokens.iter()
+    }
+
+    /// Returns an iterator over all labels in the tokenized name.
+    /// Basically, it splits the tokenized name by stop tokens.
+    pub fn iter_labels(&self) -> impl Iterator<Item = TokenizedLabel<'_>> {
+        self.tokens
+            .split(|t| matches!(t, EnsNameToken::Stop(_)))
+            .map(TokenizedLabel::from)
+    }
+
+    pub fn labels(&self) -> Vec<TokenizedLabel<'_>> {
+        self.iter_labels().collect()
+    }
+}
+
+impl TokenizedLabel<'_> {
     /// Returns true if all tokens in the label are emoji tokens
     pub fn is_fully_emoji(&self) -> bool {
         self.tokens
@@ -35,6 +79,11 @@ impl TokenizedLabel {
         self.tokens
             .iter()
             .all(|token| token.cps().into_iter().all(utils::is_ascii))
+    }
+
+    /// Returns an iterator over all codepoints in all tokens.
+    pub fn iter_cps(&self) -> impl DoubleEndedIterator<Item = CodePoint> + '_ {
+        self.tokens.iter().flat_map(|token| token.cps())
     }
 
     /// Collapses consecutive text tokens into single text tokens, keeping emoji tokens separate.
@@ -83,51 +132,51 @@ impl TokenizedLabel {
     }
 }
 
-/// Tokenizes a full ENS name by splitting on dots and tokenizing each label
-/// Returns a TokenizedName containing the original input and tokenized labels
-pub fn tokenize_name(
+impl<'a, T> From<&'a T> for TokenizedLabel<'a>
+where
+    T: AsRef<[EnsNameToken]> + ?Sized,
+{
+    fn from(tokens: &'a T) -> Self {
+        TokenizedLabel {
+            tokens: tokens.as_ref(),
+        }
+    }
+}
+
+fn tokenize_name(
     name: impl AsRef<str>,
     specs: &CodePointsSpecs,
     apply_nfc: bool,
 ) -> Result<TokenizedName, ProcessError> {
     let name = name.as_ref();
     if name.is_empty() {
-        return Ok(TokenizedName {
-            input: name.to_string(),
-            labels: vec![],
-        });
+        return Ok(TokenizedName::empty());
     }
-    let labels = name
-        .split(constants::CP_STOP as u8 as char)
-        .map(|label| tokenize_label(label, specs, apply_nfc))
-        .collect::<Result<Vec<_>, _>>()?;
+    let tokens = tokenize_input(name, specs, apply_nfc)?;
     Ok(TokenizedName {
         input: name.to_string(),
-        labels,
+        tokens,
     })
 }
 
-/// Tokenizes a single ENS label into a sequence of tokens
-/// Handles emoji sequences and individual codepoints according to the specs
-/// Optionally applies NFC normalization
-pub fn tokenize_label(
-    label: impl AsRef<str>,
+fn tokenize_input(
+    input: impl AsRef<str>,
     specs: &CodePointsSpecs,
     apply_nfc: bool,
-) -> Result<TokenizedLabel, ProcessError> {
-    let label = label.as_ref();
-    let emojis = specs.finditer_emoji(label).collect::<Vec<_>>();
+) -> Result<Vec<EnsNameToken>, ProcessError> {
+    let input = input.as_ref();
+    let emojis = specs.finditer_emoji(input).collect::<Vec<_>>();
 
     let mut tokens = Vec::new();
     let mut input_cur = 0;
 
-    while input_cur < label.len() {
-        if let Some(emoji) = maybe_starts_with_emoji(input_cur, label, &emojis, specs) {
+    while input_cur < input.len() {
+        if let Some(emoji) = maybe_starts_with_emoji(input_cur, input, &emojis, specs) {
             let cursor_offset = emoji.input.len();
             tokens.push(EnsNameToken::Emoji(emoji));
             input_cur += cursor_offset;
         } else {
-            let char = label[input_cur..]
+            let char = input[input_cur..]
                 .chars()
                 .next()
                 .expect("input_cur is in bounds");
@@ -143,15 +192,7 @@ pub fn tokenize_label(
         perform_nfc_transform(&mut tokens, specs);
     }
     collapse_valid_tokens(&mut tokens);
-    let cps = tokens
-        .iter()
-        .flat_map(|token| token.cps())
-        .collect::<Vec<_>>();
-    Ok(TokenizedLabel {
-        input: label.to_string(),
-        tokens,
-        cps,
-    })
+    Ok(tokens)
 }
 
 fn perform_nfc_transform(tokens: &mut Vec<EnsNameToken>, specs: &CodePointsSpecs) {
@@ -429,8 +470,8 @@ mod tests {
         #[case] expected: Vec<EnsNameToken>,
         specs: &CodePointsSpecs,
     ) {
-        let result = tokenize_label(input, specs, apply_nfc).expect("tokenize");
-        assert_eq!(result.tokens, expected);
+        let tokens = tokenize_input(input, specs, apply_nfc).expect("tokenize");
+        assert_eq!(tokens, expected);
     }
 
     #[rstest]
@@ -453,9 +494,9 @@ mod tests {
         #[case] expected: Vec<CollapsedEnsNameToken>,
         specs: &CodePointsSpecs,
     ) {
-        let result = tokenize_label(input, specs, true)
-            .expect("tokenize")
-            .collapse_into_text_or_emoji();
+        let tokens = tokenize_input(input, specs, true).expect("tokenize");
+        let label = TokenizedLabel::from(&tokens);
+        let result = label.collapse_into_text_or_emoji();
         assert_eq!(result, expected);
     }
 }
