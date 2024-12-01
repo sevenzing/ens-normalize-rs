@@ -76,9 +76,19 @@ fn check_token_types(label: &TokenizedLabel) -> Result<(), ProcessError> {
         .iter()
         .find(|token| token.is_disallowed() || token.is_stop())
     {
-        return Err(ProcessError::DisallowedSequence(
-            DisallowedSequence::Invalid(utils::cps2str(&token.cps())),
-        ));
+        let cps = token.cps();
+        let maybe_invisible_cp = cps.iter().find(|cp| {
+            *cp == &constants::CP_ZERO_WIDTH_JOINER || *cp == &constants::CP_ZERO_WIDTH_NON_JOINER
+        });
+        if let Some(invisible_cp) = maybe_invisible_cp {
+            return Err(ProcessError::DisallowedSequence(
+                DisallowedSequence::InvisibleCharacter(*invisible_cp),
+            ));
+        } else {
+            return Err(ProcessError::DisallowedSequence(
+                DisallowedSequence::Invalid(utils::cps2str(&cps)),
+            ));
+        }
     }
     Ok(())
 }

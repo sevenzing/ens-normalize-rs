@@ -1,3 +1,5 @@
+use crate::CodePoint;
+
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum ProcessError {
     #[error("contains visually confusing characters from multiple scripts: {0}")]
@@ -37,6 +39,8 @@ pub enum CurrableError {
 pub enum DisallowedSequence {
     #[error("disallowed character: {0}")]
     Invalid(String),
+    #[error("invisible character: {0}")]
+    InvisibleCharacter(CodePoint),
     #[error("empty label")]
     EmptyLabel,
     #[error("nsm too many")]

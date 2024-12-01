@@ -25,6 +25,7 @@ ens-normalize-rs = "0.1.1"
 
 ```rust
 fn main() {
+    fn main() {
     // Using normalizer to reuse preloaded data
     let normalizer = ens_normalize_rs::EnsNameNormalizer::default();
     let name = "🅰️🅱.eth";
@@ -38,6 +39,22 @@ fn main() {
     // Using normalize directly
     let normalized = normalizer.normalize("Levvv.eth").unwrap();
     assert_eq!(normalized, "levvv.eth");
+
+    // Handling errors
+    assert!(matches!(
+        normalizer.normalize("Levvv..eth"),
+        Err(ens_normalize_rs::ProcessError::DisallowedSequence(
+            ens_normalize_rs::DisallowedSequence::EmptyLabel
+        ))
+    ));
+    assert!(matches!(
+        // U+200D ZERO WIDTH JOINER
+        normalizer.normalize("Ni‍ck.ETH"),
+        Err(ens_normalize_rs::ProcessError::DisallowedSequence(
+            ens_normalize_rs::DisallowedSequence::InvisibleCharacter(0x200d)
+        ))
+    ));
+}
 }
 ```
 

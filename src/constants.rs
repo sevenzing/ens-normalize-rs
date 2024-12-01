@@ -11,6 +11,8 @@ pub const CP_XI_SMALL: CodePoint = 0x3BE;
 pub const CP_XI_CAPITAL: CodePoint = 0x39E;
 pub const CP_UNDERSCORE: CodePoint = 0x5F;
 pub const CP_HYPHEN: CodePoint = 0x2D;
+pub const CP_ZERO_WIDTH_JOINER: CodePoint = 0x200D;
+pub const CP_ZERO_WIDTH_NON_JOINER: CodePoint = 0x200C;
 
 pub const GREEK_GROUP_NAME: &str = "Greek";
 pub const MAX_EMOJI_LEN: usize = 0x2d;

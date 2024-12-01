@@ -12,4 +12,19 @@ fn main() {
     // Using normalize directly
     let normalized = normalizer.normalize("Levvv.eth").unwrap();
     assert_eq!(normalized, "levvv.eth");
+
+    // Handling errors
+    assert!(matches!(
+        normalizer.normalize("Levvv..eth"),
+        Err(ens_normalize_rs::ProcessError::DisallowedSequence(
+            ens_normalize_rs::DisallowedSequence::EmptyLabel
+        ))
+    ));
+    assert!(matches!(
+        // U+200D ZERO WIDTH JOINER
+        normalizer.normalize("Ni‍ck.ETH"),
+        Err(ens_normalize_rs::ProcessError::DisallowedSequence(
+            ens_normalize_rs::DisallowedSequence::InvisibleCharacter(0x200d)
+        ))
+    ));
 }
