@@ -1,5 +1,6 @@
 use crate::CodePoint;
 
+/// Errors that can occur during processing of an ENS name.
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum ProcessError {
     #[error("contains visually confusing characters from multiple scripts: {0}")]
@@ -17,6 +18,7 @@ pub enum ProcessError {
     DisallowedSequence(#[from] DisallowedSequence),
 }
 
+/// Errors that can be cured by the normalizer.
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum CurrableError {
     #[error("underscore in middle")]
@@ -35,6 +37,7 @@ pub enum CurrableError {
     FencedConsecutive,
 }
 
+/// Errors regarding disallowed sequences.
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum DisallowedSequence {
     #[error("disallowed character: {0}")]

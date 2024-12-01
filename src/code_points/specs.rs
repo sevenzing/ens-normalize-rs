@@ -48,6 +48,7 @@ impl CodePointsSpecs {
             .collect();
         let valid = compute_valid(&groups, &decomp);
         let whole_map = compute_whole_map(spec.whole_map);
+
         let emoji_str_list = emoji
             .iter()
             .map(|cps| utils::cps2str(cps))

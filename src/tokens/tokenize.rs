@@ -7,9 +7,6 @@ use crate::{
 };
 
 /// Represents a full ENS name, including the original input and the sequence of tokens
-/// vitalik.eth
-/// ^^^^^^^^^^^
-/// name
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenizedName {
     pub input: String,
@@ -17,11 +14,6 @@ pub struct TokenizedName {
 }
 
 /// Represents a tokenized ENS label (part of a name separated by periods), including sequence of tokens
-/// vitalik.eth
-/// ^^^^^^^
-/// label 1
-///         ^^^
-///         label 2
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenizedLabel<'a> {
     pub tokens: &'a [EnsNameToken],

@@ -1,6 +1,8 @@
 # ens-normalize-rs
 
 ![tests](https://github.com/sevenzing/ens-normalize-rs/actions/workflows/tests.yml/badge.svg)
+![Crates.io Version](https://img.shields.io/crates/v/ens-normalize-rs)
+
 
 A Rust implementation of ENS (Ethereum Name Service) name normalization.
 

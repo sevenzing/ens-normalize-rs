@@ -9,7 +9,7 @@ mod tokens;
 mod utils;
 mod validate;
 
-pub use code_points::*;
+pub(crate) use code_points::*;
 pub use error::{CurrableError, DisallowedSequence, ProcessError};
 pub use normalizer::{beautify, normalize, process, tokenize, EnsNameNormalizer, ProcessedName};
 pub use tokens::*;
