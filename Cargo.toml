@@ -1,6 +1,6 @@
 [package]
 name = "ens-normalize-rs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Ethereum Name Service (ENS) name normalization"
 license = "MIT"

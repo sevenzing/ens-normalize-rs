@@ -1,11 +1,11 @@
-use ens_normalize_rs::{CurrableError, DisallowedSequence, ProcessError, Processor};
+use ens_normalize_rs::{CurrableError, DisallowedSequence, EnsNameNormalizer, ProcessError};
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};
 
 #[fixture]
 #[once]
-fn processor() -> Processor {
-    Processor::default()
+fn normalizer() -> EnsNameNormalizer {
+    EnsNameNormalizer::default()
 }
 
 #[rstest]
@@ -49,9 +49,9 @@ fn processor() -> Processor {
 fn e2e_tests(
     #[case] name: &str,
     #[case] expected: Result<(&str, &str), ProcessError>,
-    processor: &Processor,
+    normalizer: &EnsNameNormalizer,
 ) {
-    let actual = processor.process(name);
+    let actual = normalizer.process(name);
     match expected {
         Ok((expected_normalized, expected_beautified)) => {
             let res = actual.expect("process should succeed");

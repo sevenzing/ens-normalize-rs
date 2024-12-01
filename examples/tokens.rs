@@ -1,10 +1,10 @@
-use ens_normalize_rs::Processor;
+use ens_normalize_rs::EnsNameNormalizer;
 
 fn main() {
-    let processor = Processor::default();
+    let normalizer = EnsNameNormalizer::default();
 
     let name = "Nàme‍🧙‍♂.eth";
-    let result = processor.tokenize(name).unwrap();
+    let result = normalizer.tokenize(name).unwrap();
 
     for token in result.tokens {
         if token.is_disallowed() {

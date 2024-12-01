@@ -1,4 +1,4 @@
-use ens_normalize_rs::Processor;
+use ens_normalize_rs::EnsNameNormalizer;
 use lazy_static::lazy_static;
 use rayon::prelude::*;
 use rstest::rstest;
@@ -44,10 +44,10 @@ fn ens_tests() {
 }
 
 fn test_cases_parallel(cases: &[IndexedTestCase]) {
-    let processor = Processor::default();
+    let normalizer = EnsNameNormalizer::default();
     let results = cases
         .par_iter() // Parallel iterator from Rayon
-        .map(|(i, test_case)| (i, process_test_case(&processor, test_case)))
+        .map(|(i, test_case)| (i, process_test_case(&normalizer, test_case)))
         .filter_map(|(i, r)| r.err().map(|e| (i, e)))
         .collect::<Vec<_>>();
 
@@ -61,13 +61,13 @@ fn test_cases_parallel(cases: &[IndexedTestCase]) {
     }
 }
 
-fn process_test_case(processor: &Processor, case: &TestCase) -> Result<(), anyhow::Error> {
+fn process_test_case(normalizer: &EnsNameNormalizer, case: &TestCase) -> Result<(), anyhow::Error> {
     let test_name = match (case.comment.as_ref(), case.name.as_str()) {
         (Some(comment), name) if name.len() < 64 => format!("{comment} (`{name}`)"),
         (Some(comment), _) => comment.clone(),
         (None, name) => name.to_string(),
     };
-    let result = processor.process(&case.name);
+    let result = normalizer.process(&case.name);
 
     match result {
         Err(_e) if case.error => (),

@@ -8,9 +8,9 @@ fn main() {
         .take(NAME_LENGTH / NAME.len())
         .collect::<Vec<_>>()
         .join("");
-    let processor = ens_normalize_rs::Processor::default();
+    let normalizer = ens_normalize_rs::EnsNameNormalizer::default();
     for _ in 0..SIZE {
-        let _name = processor.process(&name).unwrap();
+        let _name = normalizer.process(&name).unwrap();
     }
     // Total time to process 100 names: 728.916542ms
     println!("Total time to process {SIZE} names: {:?}", now.elapsed());

@@ -4,7 +4,7 @@ use crate::{
 };
 
 #[derive(Default)]
-pub struct Processor {
+pub struct EnsNameNormalizer {
     specs: CodePointsSpecs,
 }
 
@@ -14,7 +14,7 @@ pub struct ProcessedName {
     pub tokenized: TokenizedName,
 }
 
-impl Processor {
+impl EnsNameNormalizer {
     pub fn new(specs: CodePointsSpecs) -> Self {
         Self { specs }
     }
@@ -50,17 +50,17 @@ impl ProcessedName {
 }
 
 pub fn tokenize(input: impl AsRef<str>) -> Result<TokenizedName, ProcessError> {
-    Processor::default().tokenize(input)
+    EnsNameNormalizer::default().tokenize(input)
 }
 
 pub fn process(input: impl AsRef<str>) -> Result<ProcessedName, ProcessError> {
-    Processor::default().process(input)
+    EnsNameNormalizer::default().process(input)
 }
 
 pub fn normalize(input: impl AsRef<str>) -> Result<String, ProcessError> {
-    Processor::default().normalize(input)
+    EnsNameNormalizer::default().normalize(input)
 }
 
 pub fn beautify(input: impl AsRef<str>) -> Result<String, ProcessError> {
-    Processor::default().beautify(input)
+    EnsNameNormalizer::default().beautify(input)
 }

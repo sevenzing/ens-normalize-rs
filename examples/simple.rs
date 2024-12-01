@@ -1,8 +1,8 @@
 fn main() {
-    // Using processor to reuse preloaded data
-    let processor = ens_normalize_rs::Processor::default();
+    // Using normalizer to reuse preloaded data
+    let normalizer = ens_normalize_rs::EnsNameNormalizer::default();
     let name = "🅰️🅱.eth";
-    let processed = processor.process(name).unwrap();
+    let processed = normalizer.process(name).unwrap();
     let beautified_name = processed.beautify();
     let normalized_name = processed.normalize();
 
