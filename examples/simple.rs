@@ -9,7 +9,7 @@ fn main() {
     assert_eq!(normalized_name, "🅰🅱.eth");
     assert_eq!(beautified_name, "🅰️🅱️.eth");
 
-    // Using process directly
-    let processed = ens_normalize_rs::process("Levvv.eth").unwrap();
-    assert_eq!(processed.normalize(), "levvv.eth");
+    // Using normalize directly
+    let normalized = normalizer.normalize("Levvv.eth").unwrap();
+    assert_eq!(normalized, "levvv.eth");
 }
