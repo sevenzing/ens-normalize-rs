@@ -96,7 +96,7 @@ impl CodePointsSpecs {
             .unwrap_or(false)
     }
 
-    pub fn finditer_emoji<'a>(&'a self, s: &'a str) -> impl Iterator<Item = regex::Match<'_>> {
+    pub fn finditer_emoji<'a>(&'a self, s: &'a str) -> impl Iterator<Item = regex::Match<'a>> {
         self.emoji_regex.find_iter(s)
     }
 
