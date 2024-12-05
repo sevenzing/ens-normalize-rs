@@ -342,23 +342,22 @@ fn determine_group<'a>(
                     .iter_cps()
                     .position(|cp_in_label| cp_in_label == cp)
                     .expect("cp must exist in label");
-                match maybe_group {
-                    Some(group) => {
-                        return Err(ProcessError::CurrableError {
-                            inner: CurrableError::Confused {
-                                group_name: group.name.to_string(),
-                                cp,
-                            },
-                            index: index_of_cp,
-                            sequence: utils::cp2str(cp),
-                            maybe_suggest: Some("".to_string()),
-                        });
-                    }
-                    None => unreachable!(),
-                }
+                let inner = match maybe_group {
+                    Some(group) => CurrableError::Confused {
+                        group_name: group.name.to_string(),
+                        cp,
+                    },
+                    None => CurrableError::Disallowed,
+                };
+                return Err(ProcessError::CurrableError {
+                    inner,
+                    index: index_of_cp,
+                    sequence: utils::cp2str(cp),
+                    maybe_suggest: Some("".to_string()),
+                });
             }
         }
-        unreachable!("")
+        unreachable!()
     }
 }
 

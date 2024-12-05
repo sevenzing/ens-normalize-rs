@@ -33,6 +33,8 @@ pub enum CurrableError {
     FencedConsecutive,
     #[error("contains visually confusing characters from multiple scripts: character with code '{cp}' not in group '{group_name}'")]
     Confused { group_name: String, cp: CodePoint },
+    #[error("contains a disallowed character")]
+    Disallowed,
 }
 
 /// Errors regarding disallowed sequences.
