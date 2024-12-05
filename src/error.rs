@@ -1,11 +1,8 @@
 use crate::CodePoint;
 
+/// Errors that can occur during processing of an ENS name.
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum ProcessError {
-    #[error("contains visually confusing characters from multiple scripts: {0}")]
-    Confused(String),
-    #[error("contains visually confusing characters from {group1} and {group2} scripts")]
-    ConfusedGroups { group1: String, group2: String },
     #[error("invalid character ('{sequence}') at position {index}: {inner}")]
     CurrableError {
         inner: CurrableError,
@@ -17,6 +14,7 @@ pub enum ProcessError {
     DisallowedSequence(#[from] DisallowedSequence),
 }
 
+/// Errors that can be cured by the normalizer.
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum CurrableError {
     #[error("underscore in middle")]
@@ -33,8 +31,13 @@ pub enum CurrableError {
     FencedTrailing,
     #[error("consecutive sequence of fenced characters")]
     FencedConsecutive,
+    #[error("contains visually confusing characters from multiple scripts: character with code '{cp}' not in group '{group_name}'")]
+    Confused { group_name: String, cp: CodePoint },
+    #[error("contains a disallowed character")]
+    Disallowed,
 }
 
+/// Errors regarding disallowed sequences.
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum DisallowedSequence {
     #[error("disallowed character: {0}")]
@@ -47,4 +50,6 @@ pub enum DisallowedSequence {
     NsmTooMany,
     #[error("nsm repeated")]
     NsmRepeated,
+    #[error("contains visually confusing characters from {group1} and {group2} scripts")]
+    ConfusedGroups { group1: String, group2: String },
 }

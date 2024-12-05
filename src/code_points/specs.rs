@@ -48,6 +48,7 @@ impl CodePointsSpecs {
             .collect();
         let valid = compute_valid(&groups, &decomp);
         let whole_map = compute_whole_map(spec.whole_map);
+
         let emoji_str_list = emoji
             .iter()
             .map(|cps| utils::cps2str(cps))
@@ -95,7 +96,7 @@ impl CodePointsSpecs {
             .unwrap_or(false)
     }
 
-    pub fn finditer_emoji<'a>(&'a self, s: &'a str) -> impl Iterator<Item = regex::Match<'_>> {
+    pub fn finditer_emoji<'a>(&'a self, s: &'a str) -> impl Iterator<Item = regex::Match<'a>> {
         self.emoji_regex.find_iter(s)
     }
 

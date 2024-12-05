@@ -42,6 +42,7 @@ impl ParsedGroup {
 pub type ParsedWholeMap = HashMap<CodePoint, ParsedWholeValue>;
 
 pub enum ParsedWholeValue {
+    #[allow(dead_code)]
     Number(u32),
     WholeObject(ParsedWholeObject),
 }
@@ -59,6 +60,7 @@ impl TryFrom<spec_json::WholeValue> for ParsedWholeValue {
 }
 
 pub struct ParsedWholeObject {
+    #[allow(dead_code)]
     pub v: HashSet<CodePoint>,
     pub m: HashMap<CodePoint, HashSet<String>>,
 }
