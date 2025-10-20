@@ -1,0 +1,117 @@
+name: Update Unicode Normalization Files
+
+on:
+  # Run daily at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * *'
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      force_update:
+        description: 'Force update even if no changes detected'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  check-and-update:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+
+    - name: Check for updates
+      id: check_updates
+      run: |
+        python tools/unicode-update.py --force=${{ inputs.force_update }}
+
+    - name: Update files if changes detected
+      if: steps.check_updates.outputs.should_update == 'true'
+      run: |
+        python tools/unicode-update.py --update
+
+    - name: Configure Git
+      if: steps.check_updates.outputs.should_update == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+
+    - name: Create commit
+      if: steps.check_updates.outputs.should_update == 'true'
+      run: |
+        git add src/static_data/nf.json src/static_data/spec.json
+        
+        # Create detailed commit message
+        COMMIT_MSG="Update Unicode normalization files
+        
+        - nf.json: ${{ steps.check_updates.outputs.nf_created }} (Unicode ${{ steps.check_updates.outputs.nf_unicode }})
+        - spec.json: ${{ steps.check_updates.outputs.spec_created }} (Unicode ${{ steps.check_updates.outputs.spec_unicode }}, CLDR ${{ steps.check_updates.outputs.spec_cldr }})
+        
+        Files updated from:
+        - https://raw.githubusercontent.com/adraffy/ens-normalize.js/refs/heads/main/derive/output/nf.json
+        - https://raw.githubusercontent.com/adraffy/ens-normalize.js/refs/heads/main/derive/output/spec.json
+        
+        This is an automated update by the Unicode Update workflow."
+        
+        git commit -m "$COMMIT_MSG"
+
+    - name: Create Pull Request
+      if: steps.check_updates.outputs.should_update == 'true'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "Update Unicode normalization files"
+        title: "🔄 Update Unicode normalization files (${{ steps.check_updates.outputs.nf_created }})"
+        body: |
+          ## 📋 Summary
+          
+          This PR automatically updates the Unicode normalization files used by the ENS normalization library.
+          
+          ## 📊 Changes
+          
+          | File | Status | Created | Unicode Version |
+          |------|--------|---------|-----------------|
+          | `nf.json` | ${{ steps.check_updates.outputs.nf_changed == 'true' && '✅ Updated' || '➖ No changes' }} | ${{ steps.check_updates.outputs.nf_created }} | ${{ steps.check_updates.outputs.nf_unicode }} |
+          | `spec.json` | ${{ steps.check_updates.outputs.spec_changed == 'true' && '✅ Updated' || '➖ No changes' }} | ${{ steps.check_updates.outputs.spec_created }} | ${{ steps.check_updates.outputs.spec_unicode }} |
+          
+          ## 🔗 Source
+          
+          Files updated from:
+          - [nf.json](https://raw.githubusercontent.com/adraffy/ens-normalize.js/refs/heads/main/derive/output/nf.json)
+          - [spec.json](https://raw.githubusercontent.com/adraffy/ens-normalize.js/refs/heads/main/derive/output/spec.json)
+          
+          ## 🤖 Automation
+          
+          This PR was created automatically by the [Unicode Update workflow](.github/workflows/unicode-update.yml).
+          
+          ## ✅ Next Steps
+          
+          - [ ] Review the changes
+          - [ ] Run tests to ensure compatibility
+          - [ ] Merge if everything looks good
+        branch: update-unicode-files-${{ github.run_number }}
+        delete-branch: true
+        labels: |
+          automated
+          unicode-update
+          dependencies
+
+    - name: No changes detected
+      if: steps.check_updates.outputs.should_update == 'false'
+      run: |
+        echo "✅ No changes detected in Unicode normalization files"
+        echo "Current files are up to date with the source repository"

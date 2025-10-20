@@ -4,10 +4,8 @@ const NAME: &str = "$Sand-#️⃣🇪🇨";
 
 fn main() {
     let now = std::time::Instant::now();
-    let name = std::iter::repeat(NAME)
-        .take(NAME_LENGTH / NAME.len())
-        .collect::<Vec<_>>()
-        .join("");
+    let n = NAME_LENGTH / NAME.len();
+    let name = std::iter::repeat_n(NAME, n).collect::<Vec<_>>().join("");
     let normalizer = ens_normalize_rs::EnsNameNormalizer::default();
     for _ in 0..SIZE {
         let _name = normalizer.process(&name).unwrap();

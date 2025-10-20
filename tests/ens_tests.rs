@@ -94,7 +94,7 @@ fn process_test_case(normalizer: &EnsNameNormalizer, case: &TestCase) -> Result<
     Ok(())
 }
 
-fn only_cases(entries: &[Entry]) -> Vec<IndexedTestCase> {
+fn only_cases(entries: &[Entry]) -> Vec<IndexedTestCase<'_>> {
     entries
         .iter()
         .filter_map(|e| match e {
