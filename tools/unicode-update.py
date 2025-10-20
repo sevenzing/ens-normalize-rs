@@ -150,7 +150,7 @@ def cleanup_temp_files() -> None:
 def main():
     """Main function."""
     parser = argparse.ArgumentParser(description="Check for Unicode normalization file updates")
-    parser.add_argument("--force", action="store_true", help="Force update even if no changes detected")
+    parser.add_argument("--force", type=str, help="Force update even if no changes detected (true/false)", default="false")
     parser.add_argument("--nf-url", default="https://raw.githubusercontent.com/adraffy/ens-normalize.js/refs/heads/main/derive/output/nf.json",
                        help="URL for nf.json file")
     parser.add_argument("--spec-url", default="https://raw.githubusercontent.com/adraffy/ens-normalize.js/refs/heads/main/derive/output/spec.json",
@@ -164,12 +164,15 @@ def main():
     args = parser.parse_args()
     
     try:
+        # Parse force argument
+        force_update = args.force and args.force.lower() in ('true', '1', 'yes', 'on')
+        
         should_update, metadata = check_for_updates(
             args.nf_url,
             args.spec_url,
             args.nf_local,
             args.spec_local,
-            args.force
+            force_update
         )
         
         if should_update and args.update:
