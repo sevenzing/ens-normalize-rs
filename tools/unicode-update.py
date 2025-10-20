@@ -26,7 +26,7 @@ def get_file_hash(file_path: str) -> str | None:
 def download_file(url: str, filename: str) -> str:
     """Download file and return its hash."""
     print(f"Downloading {url}...")
-    response = requests.get(url)
+    response = requests.get(url, timeout=30)
     response.raise_for_status()
     
     with open(filename, 'wb') as f:
@@ -177,20 +177,23 @@ def main():
         
         # Output results for GitHub Actions
         if 'GITHUB_ACTIONS' in os.environ:
-            print(f"::set-output name=nf_changed::{str(metadata['nf_changed']).lower()}")
-            print(f"::set-output name=spec_changed::{str(metadata['spec_changed']).lower()}")
-            print(f"::set-output name=nf_new_hash::{metadata['nf_new_hash']}")
-            print(f"::set-output name=spec_new_hash::{metadata['spec_new_hash']}")
-            print(f"::set-output name=nf_created::{metadata['nf_created']}")
-            print(f"::set-output name=nf_unicode::{metadata['nf_unicode']}")
-            print(f"::set-output name=spec_created::{metadata['spec_created']}")
-            print(f"::set-output name=spec_unicode::{metadata['spec_unicode']}")
-            print(f"::set-output name=spec_cldr::{metadata['spec_cldr']}")
-            print(f"::set-output name=has_changes::{str(metadata['has_changes']).lower()}")
-            print(f"::set-output name=should_update::{str(metadata['should_update']).lower()}")
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                f.write(f"nf_changed={str(metadata['nf_changed']).lower()}\n")
+                f.write(f"spec_changed={str(metadata['spec_changed']).lower()}\n")
+                f.write(f"nf_new_hash={metadata['nf_new_hash']}\n")
+                f.write(f"spec_new_hash={metadata['spec_new_hash']}\n")
+                f.write(f"nf_created={metadata['nf_created']}\n")
+                f.write(f"nf_unicode={metadata['nf_unicode']}\n")
+                f.write(f"spec_created={metadata['spec_created']}\n")
+                f.write(f"spec_unicode={metadata['spec_unicode']}\n")
+                f.write(f"spec_cldr={metadata['spec_cldr']}\n")
+                f.write(f"has_changes={str(metadata['has_changes']).lower()}\n")
+                f.write(f"should_update={str(metadata['should_update']).lower()}\n")
         
         # Exit with appropriate code
-        sys.exit(0 if should_update else 1)
+        # Always exit with 0 for GitHub Actions to prevent workflow failure
+        # The workflow will check the should_update output to determine next steps
+        sys.exit(0)
         
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
