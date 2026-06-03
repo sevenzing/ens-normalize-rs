@@ -29,3 +29,15 @@ impl Default for Nf {
         DEFAULT_NF.clone()
     }
 }
+
+#[cfg(test)]
+mod nf_parse_tests {
+    use super::*;
+    #[test]
+    fn decomp_loads() {
+        let nf = Nf::default();
+        assert_eq!(nf.decomp.len(), 2081);
+        assert_eq!(nf.decomp[0].number, 192);
+        assert_eq!(nf.decomp[0].nested_numbers, vec![65, 768]);
+    }
+}

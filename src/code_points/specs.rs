@@ -7,8 +7,90 @@ use crate::{
     },
     utils, CodePoint,
 };
-use regex::Regex;
 use std::collections::{HashMap, HashSet};
+use unicode_normalization::UnicodeNormalization;
+
+struct Extent {
+    group_indices: HashSet<usize>,
+    codepoints: HashSet<CodePoint>,
+}
+
+struct EmojiNode {
+    children: HashMap<CodePoint, usize>,
+    emoji: Option<Vec<CodePoint>>,
+}
+
+struct EmojiTrie {
+    nodes: Vec<EmojiNode>,
+}
+
+impl EmojiTrie {
+    fn new() -> Self {
+        Self {
+            nodes: vec![EmojiNode {
+                children: HashMap::new(),
+                emoji: None,
+            }],
+        }
+    }
+
+    fn insert(&mut self, emoji: &[CodePoint]) {
+        let mut frontier = vec![0];
+        for &cp in emoji {
+            let mut next = Vec::new();
+            for &idx in &frontier {
+                let child_idx = if let Some(&child) = self.nodes[idx].children.get(&cp) {
+                    child
+                } else {
+                    self.nodes.push(EmojiNode {
+                        children: HashMap::new(),
+                        emoji: None,
+                    });
+                    let child = self.nodes.len() - 1;
+                    self.nodes[idx].children.insert(cp, child);
+                    child
+                };
+                next.push(child_idx);
+            }
+            if cp == constants::CP_FE0F {
+                frontier.extend(next);
+            } else {
+                frontier = next;
+            }
+        }
+        for idx in frontier {
+            self.nodes[idx].emoji = Some(emoji.to_vec());
+        }
+    }
+
+    fn longest_match(&self, cps: &[CodePoint], start: usize) -> Option<(usize, Vec<CodePoint>)> {
+        let mut frontier = vec![0];
+        let mut matched: Option<Vec<CodePoint>> = None;
+        let mut end = start;
+
+        for (i, &cp) in cps.iter().enumerate().skip(start) {
+            let mut next = Vec::new();
+            for &idx in &frontier {
+                if let Some(&child) = self.nodes[idx].children.get(&cp) {
+                    next.push(child);
+                }
+            }
+            if cp == constants::CP_FE0F {
+                frontier.extend(&next);
+            } else {
+                frontier = next;
+            }
+            for &idx in &frontier {
+                if let Some(emoji) = &self.nodes[idx].emoji {
+                    matched = Some(emoji.clone());
+                    end = i + 1;
+                }
+            }
+        }
+
+        matched.map(|emoji| (end, emoji))
+    }
+}
 
 /// This struct contains logic for validating and normalizing code points.
 pub struct CodePointsSpecs {
@@ -16,7 +98,9 @@ pub struct CodePointsSpecs {
     ignored: HashSet<CodePoint>,
     mapped: HashMap<CodePoint, Vec<CodePoint>>,
     nfc_check: HashSet<CodePoint>,
-    whole_map: ParsedWholeMap,
+    wholes: Vec<ParsedWhole>,
+    confusables: HashMap<CodePoint, usize>,
+    unique_non_confusables: HashSet<CodePoint>,
     fenced: HashMap<CodePoint, String>,
     groups: Vec<ParsedGroup>,
     group_name_to_index: HashMap<spec_json::GroupName, usize>,
@@ -25,7 +109,7 @@ pub struct CodePointsSpecs {
     nsm_max: u32,
     emoji_no_fe0f_to_pretty: HashMap<Vec<CodePoint>, Vec<CodePoint>>,
     decomp: HashMap<CodePoint, Vec<CodePoint>>,
-    emoji_regex: Regex,
+    emoji_trie: EmojiTrie,
 }
 
 impl CodePointsSpecs {
@@ -46,15 +130,14 @@ impl CodePointsSpecs {
             .enumerate()
             .map(|(i, g)| (g.name.clone(), i))
             .collect();
-        let valid = compute_valid(&groups, &decomp);
-        let whole_map = compute_whole_map(spec.whole_map);
+        let valid = compute_valid(&groups);
+        let (wholes, confusables) = decode_wholes(spec.wholes, &groups);
+        let unique_non_confusables = compute_unique_non_confusables(&groups, &confusables);
 
-        let emoji_str_list = emoji
-            .iter()
-            .map(|cps| utils::cps2str(cps))
-            .collect::<Vec<_>>();
-        let emoji_regex =
-            create_emoji_regex_pattern(emoji_str_list).expect("failed to create emoji regex");
+        let mut emoji_trie = EmojiTrie::new();
+        for e in &emoji {
+            emoji_trie.insert(e);
+        }
 
         Self {
             cm: spec.cm.into_iter().collect(),
@@ -68,9 +151,11 @@ impl CodePointsSpecs {
             nsm: spec.nsm.into_iter().collect(),
             nsm_max: spec.nsm_max,
             decomp,
-            whole_map,
+            wholes,
+            confusables,
+            unique_non_confusables,
             group_name_to_index,
-            emoji_regex,
+            emoji_trie,
         }
     }
 }
@@ -89,15 +174,24 @@ impl CodePointsSpecs {
     }
 
     pub fn cps_is_emoji(&self, cps: &[CodePoint]) -> bool {
-        let s = utils::cps2str(cps);
-        let maybe_match = self.finditer_emoji(&s).next();
-        maybe_match
-            .map(|m| m.start() == 0 && m.end() == s.len())
+        self.emoji_trie
+            .longest_match(cps, 0)
+            .map(|(end, _)| end == cps.len())
             .unwrap_or(false)
     }
 
-    pub fn finditer_emoji<'a>(&'a self, s: &'a str) -> impl Iterator<Item = regex::Match<'a>> {
-        self.emoji_regex.find_iter(s)
+    pub fn longest_emoji_at(
+        &self,
+        input: &str,
+        byte_offset: usize,
+    ) -> Option<(usize, Vec<CodePoint>)> {
+        let cps = utils::str2cps(&input[byte_offset..]);
+        let (end, emoji) = self.emoji_trie.longest_match(&cps, 0)?;
+        let mut byte_end = byte_offset;
+        for cp in &cps[..end] {
+            byte_end += utils::cp2str(*cp).len();
+        }
+        Some((byte_end, emoji))
     }
 
     pub fn cps_requires_check(&self, cps: &[CodePoint]) -> bool {
@@ -153,8 +247,16 @@ impl CodePointsSpecs {
         self.decomp.get(&cp)
     }
 
-    pub fn whole_map(&self, cp: CodePoint) -> Option<&ParsedWholeValue> {
-        self.whole_map.get(&cp)
+    pub fn whole_for_confusable(&self, cp: CodePoint) -> Option<&ParsedWhole> {
+        self.confusables.get(&cp).map(|&idx| &self.wholes[idx])
+    }
+
+    pub fn is_unique_non_confusable(&self, cp: CodePoint) -> bool {
+        self.unique_non_confusables.contains(&cp)
+    }
+
+    pub fn group_at(&self, index: usize) -> &ParsedGroup {
+        &self.groups[index]
     }
 
     pub fn group_by_name(&self, name: impl Into<GroupName>) -> Option<&ParsedGroup> {
@@ -164,49 +266,113 @@ impl CodePointsSpecs {
     }
 }
 
-fn compute_valid(
-    groups: &[ParsedGroup],
-    decomp: &HashMap<CodePoint, Vec<CodePoint>>,
-) -> HashSet<CodePoint> {
+fn compute_valid(groups: &[ParsedGroup]) -> HashSet<CodePoint> {
     let mut valid = HashSet::new();
     for g in groups {
-        valid.extend(g.primary_plus_secondary.iter());
+        valid.extend(g.primary_plus_secondary.iter().copied());
     }
 
-    let ndf: Vec<CodePoint> = valid
-        .iter()
-        .flat_map(|cp| decomp.get(cp).cloned().unwrap_or_default())
-        .collect();
-    valid.extend(ndf);
+    let seeds: Vec<CodePoint> = valid.iter().copied().collect();
+    for cp in seeds {
+        for c in utils::cp2str(cp).nfd() {
+            valid.insert(c as CodePoint);
+        }
+    }
     valid
 }
 
-fn compute_whole_map(whole_map: HashMap<String, spec_json::WholeValue>) -> ParsedWholeMap {
-    whole_map
-        .into_iter()
-        .map(|(k, v)| (k.parse::<CodePoint>().unwrap(), v.try_into().unwrap()))
-        .collect()
+fn decode_wholes(
+    wholes: Vec<spec_json::Whole>,
+    groups: &[ParsedGroup],
+) -> (Vec<ParsedWhole>, HashMap<CodePoint, usize>) {
+    let mut parsed_wholes = Vec::with_capacity(wholes.len());
+    let mut confusables = HashMap::new();
+
+    for whole in wholes {
+        let valid: HashSet<CodePoint> = whole.valid.into_iter().collect();
+        let confused: HashSet<CodePoint> = whole.confused.into_iter().collect();
+        let mut parsed = ParsedWhole {
+            valid: valid.clone(),
+            confused: confused.clone(),
+            complements: HashMap::new(),
+        };
+
+        let whole_index = parsed_wholes.len();
+        for cp in &confused {
+            confusables.insert(*cp, whole_index);
+        }
+
+        let mut cover = HashSet::new();
+        let mut extents = Vec::new();
+
+        for cp in valid.iter().chain(confused.iter()) {
+            let cp_groups: HashSet<usize> = groups
+                .iter()
+                .enumerate()
+                .filter(|(_, group)| group.contains_cp(*cp))
+                .map(|(index, _)| index)
+                .collect();
+
+            let extent = extents.iter_mut().find(|extent: &&mut Extent| {
+                cp_groups
+                    .iter()
+                    .any(|group_index| extent.group_indices.contains(group_index))
+            });
+
+            let extent = match extent {
+                Some(extent) => extent,
+                None => {
+                    extents.push(Extent {
+                        group_indices: HashSet::new(),
+                        codepoints: HashSet::new(),
+                    });
+                    extents.last_mut().unwrap()
+                }
+            };
+
+            for group_index in cp_groups {
+                extent.group_indices.insert(group_index);
+                cover.insert(group_index);
+            }
+            extent.codepoints.insert(*cp);
+        }
+
+        for extent in extents {
+            let mut complements: Vec<usize> = cover
+                .iter()
+                .filter(|group_index| !extent.group_indices.contains(group_index))
+                .copied()
+                .collect();
+            complements.sort_unstable();
+            for cp in extent.codepoints {
+                parsed.complements.insert(cp, complements.clone());
+            }
+        }
+
+        parsed_wholes.push(parsed);
+    }
+
+    (parsed_wholes, confusables)
 }
 
-fn create_emoji_regex_pattern(emojis: Vec<impl AsRef<str>>) -> Result<Regex, regex::Error> {
-    let fe0f = regex::escape(constants::STR_FE0F);
+fn compute_unique_non_confusables(
+    groups: &[ParsedGroup],
+    confusables: &HashMap<CodePoint, usize>,
+) -> HashSet<CodePoint> {
+    let mut counts: HashMap<CodePoint, u32> = HashMap::new();
 
-    // Make FE0F optional
-    let make_emoji = |emoji: &str| regex::escape(emoji).replace(&fe0f, &format!("{}?", fe0f));
+    for group in groups {
+        for cp in &group.primary_plus_secondary {
+            *counts.entry(*cp).or_default() += 1;
+        }
+    }
 
-    // Order emojis to match the longest ones first
-    let order = |emoji: &str| emoji.replace(constants::STR_FE0F, "").len();
-
-    let mut sorted_emojis = emojis;
-    sorted_emojis.sort_by_key(|b| std::cmp::Reverse(order(b.as_ref())));
-
-    let emoji_regex = sorted_emojis
+    counts
         .into_iter()
-        .map(|emoji| make_emoji(emoji.as_ref()))
-        .collect::<Vec<_>>()
-        .join("|");
-
-    regex::Regex::new(&emoji_regex)
+        .filter(|(_, count)| *count == 1)
+        .map(|(cp, _)| cp)
+        .filter(|cp| !confusables.contains_key(cp))
+        .collect()
 }
 
 #[cfg(test)]
@@ -249,12 +415,21 @@ mod tests {
         #[case] expected: Vec<(&str, usize, usize)>,
         specs: &CodePointsSpecs,
     ) {
-        let matches = specs.finditer_emoji(emoji).collect::<Vec<_>>();
+        let mut pos = 0;
+        let mut matches = Vec::new();
+        while pos < emoji.len() {
+            if let Some((end, _)) = specs.longest_emoji_at(emoji, pos) {
+                matches.push((pos, end));
+                pos = end;
+            } else {
+                pos += emoji[pos..].chars().next().unwrap().len_utf8();
+            }
+        }
         assert_eq!(matches.len(), expected.len());
-        for (i, (emoji, start, end)) in expected.into_iter().enumerate() {
-            assert_eq!(matches[i].as_str(), emoji);
-            assert_eq!(matches[i].start(), start);
-            assert_eq!(matches[i].end(), end);
+        for (i, (expected_emoji, start, end)) in expected.into_iter().enumerate() {
+            assert_eq!(&emoji[start..end], expected_emoji);
+            assert_eq!(matches[i].0, start);
+            assert_eq!(matches[i].1, end);
         }
     }
 

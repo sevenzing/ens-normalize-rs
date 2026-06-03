@@ -39,46 +39,10 @@ impl ParsedGroup {
     }
 }
 
-pub type ParsedWholeMap = HashMap<CodePoint, ParsedWholeValue>;
-
-pub enum ParsedWholeValue {
-    #[allow(dead_code)]
-    Number(u32),
-    WholeObject(ParsedWholeObject),
-}
-
-impl TryFrom<spec_json::WholeValue> for ParsedWholeValue {
-    type Error = anyhow::Error;
-    fn try_from(value: spec_json::WholeValue) -> Result<Self, Self::Error> {
-        match value {
-            spec_json::WholeValue::Number(number) => Ok(ParsedWholeValue::Number(number)),
-            spec_json::WholeValue::WholeObject(object) => {
-                Ok(ParsedWholeValue::WholeObject(object.try_into()?))
-            }
-        }
-    }
-}
-
-pub struct ParsedWholeObject {
-    #[allow(dead_code)]
-    pub v: HashSet<CodePoint>,
-    pub m: HashMap<CodePoint, HashSet<String>>,
-}
-
-impl TryFrom<spec_json::WholeObject> for ParsedWholeObject {
-    type Error = anyhow::Error;
-
-    fn try_from(value: spec_json::WholeObject) -> Result<Self, Self::Error> {
-        let v = value.v.into_iter().collect();
-        let m = value
-            .m
-            .into_iter()
-            .map(|(k, v)| {
-                let k = k.parse::<CodePoint>()?;
-                let v = v.into_iter().collect();
-                Ok((k, v))
-            })
-            .collect::<Result<HashMap<CodePoint, HashSet<String>>, anyhow::Error>>()?;
-        Ok(Self { v, m })
-    }
+#[derive(Debug, Clone)]
+pub struct ParsedWhole {
+    pub valid: HashSet<CodePoint>,
+    pub confused: HashSet<CodePoint>,
+    /// Group indices (into `CodePointsSpecs::groups`) not in this codepoint's confusable extent.
+    pub complements: HashMap<CodePoint, Vec<usize>>,
 }

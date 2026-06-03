@@ -3,7 +3,7 @@
 use crate::{utils::filter_fe0f, CodePoint};
 use anyhow::Context;
 use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_plain::{derive_display_from_serialize, derive_fromstr_from_deserialize};
 use serde_with::{serde_as, DisplayFromStr};
 use std::{
@@ -27,7 +27,9 @@ pub struct Spec {
     pub cldr: String,
     pub emoji: Vec<Vec<CodePoint>>,
     pub ignored: Vec<CodePoint>,
+    #[serde(deserialize_with = "deserialize_mapped")]
     pub mapped: Vec<Mapped>,
+    #[serde(deserialize_with = "deserialize_fenced")]
     pub fenced: Vec<Fenced>,
     pub cm: Vec<CodePoint>,
     pub nsm: Vec<CodePoint>,
@@ -35,7 +37,7 @@ pub struct Spec {
     pub escape: Vec<CodePoint>,
     pub groups: Vec<Group>,
     pub nfc_check: Vec<CodePoint>,
-    pub whole_map: HashMap<String, WholeValue>,
+    pub wholes: Vec<Whole>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -52,10 +54,33 @@ pub struct Fenced {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Whole {
-    #[serde(deserialize_with = "serde_aux::prelude::deserialize_number_from_string")]
-    pub target: CodePoint,
+    /// Hex codepoint id(s); metadata only in Unicode 17 `spec.json`.
+    #[serde(rename = "target")]
+    _target: String,
     pub valid: Vec<CodePoint>,
     pub confused: Vec<CodePoint>,
+}
+
+fn deserialize_mapped<'de, D>(deserializer: D) -> Result<Vec<Mapped>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw: Vec<(CodePoint, Vec<CodePoint>)> = Vec::deserialize(deserializer)?;
+    Ok(raw
+        .into_iter()
+        .map(|(from, to)| Mapped { from, to })
+        .collect())
+}
+
+fn deserialize_fenced<'de, D>(deserializer: D) -> Result<Vec<Fenced>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw: Vec<(CodePoint, String)> = Vec::deserialize(deserializer)?;
+    Ok(raw
+        .into_iter()
+        .map(|(from, to)| Fenced { from, to })
+        .collect())
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -97,20 +122,4 @@ impl Default for Spec {
     fn default() -> Self {
         DEFAULT_SPEC.clone()
     }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
-pub enum WholeValue {
-    Number(u32),
-    WholeObject(WholeObject),
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde_as]
-pub struct WholeObject {
-    #[serde(rename = "V")]
-    pub v: Vec<CodePoint>,
-    #[serde(rename = "M")]
-    pub m: HashMap<String, Vec<String>>,
 }
