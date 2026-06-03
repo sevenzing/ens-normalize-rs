@@ -1,7 +1,7 @@
 use crate::{
     constants, static_data::spec_json, utils, CodePoint, CodePointsSpecs, CollapsedEnsNameToken,
-    CurrableError, DisallowedSequence, EnsNameToken, ParsedGroup, ParsedWholeValue, ProcessError,
-    TokenizedLabel, TokenizedName,
+    CurrableError, DisallowedSequence, EnsNameToken, ParsedGroup, ProcessError, TokenizedLabel,
+    TokenizedName,
 };
 use itertools::Itertools;
 use std::collections::HashSet;
@@ -267,53 +267,55 @@ fn check_whole(
     unique_cps: &[CodePoint],
     specs: &CodePointsSpecs,
 ) -> Result<(), ProcessError> {
-    let (maker, shared) = get_groups_candidates_and_shared_cps(unique_cps, specs);
-    for group_name in maker {
-        let confused_group_candidate = specs.group_by_name(group_name).expect("group must exist");
-        if confused_group_candidate.contains_all_cps(&shared) {
-            return Err(ProcessError::ConfusedGroups {
-                group1: group.name.to_string(),
-                group2: confused_group_candidate.name.to_string(),
-            });
-        }
-    }
-    Ok(())
-}
+    let mut shared = Vec::new();
+    let mut universe = Vec::new();
+    let mut universe_len = 0usize;
 
-fn get_groups_candidates_and_shared_cps(
-    unique_cps: &[CodePoint],
-    specs: &CodePointsSpecs,
-) -> (Vec<String>, Vec<CodePoint>) {
-    let mut maybe_groups: Option<Vec<String>> = None;
-    let mut shared: Vec<CodePoint> = Vec::new();
+    for &cp in unique_cps {
+        if let Some(whole) = specs.whole_for_confusable(cp) {
+            let complements = whole
+                .complements
+                .get(&cp)
+                .expect("confusable codepoint must have complements");
 
-    for cp in unique_cps {
-        match specs.whole_map(*cp) {
-            Some(ParsedWholeValue::Number(_)) => {
-                return (vec![], vec![]);
-            }
-            Some(ParsedWholeValue::WholeObject(whole)) => {
-                let confused_groups_names = whole
-                    .m
-                    .get(cp)
-                    .expect("since we got `whole` from cp, `M` must have a value for `cp`");
-
-                match maybe_groups.as_mut() {
-                    Some(groups) => {
-                        groups.retain(|g| confused_groups_names.contains(g));
-                    }
-                    None => {
-                        maybe_groups = Some(confused_groups_names.iter().cloned().collect());
+            if universe_len == 0 {
+                universe_len = complements.len();
+                universe = complements.to_vec();
+            } else {
+                let mut next = 0;
+                for i in 0..universe_len {
+                    if complements.binary_search(&universe[i]).is_ok() {
+                        universe[next] = universe[i];
+                        next += 1;
                     }
                 }
+                universe_len = next;
+                universe.truncate(universe_len);
             }
-            None => {
-                shared.push(*cp);
+
+            if universe_len == 0 {
+                return Ok(());
             }
-        };
+        } else if specs.is_unique_non_confusable(cp) {
+            return Ok(());
+        } else {
+            shared.push(cp);
+        }
     }
 
-    (maybe_groups.unwrap_or_default(), shared)
+    if universe_len > 0 {
+        for &group_idx in &universe[..universe_len] {
+            let other = specs.group_at(group_idx);
+            if other.contains_all_cps(&shared) {
+                return Err(ProcessError::ConfusedGroups {
+                    group1: group.name.to_string(),
+                    group2: other.name.to_string(),
+                });
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn determine_group<'a>(

@@ -157,13 +157,12 @@ fn tokenize_input(
     apply_nfc: bool,
 ) -> Result<Vec<EnsNameToken>, ProcessError> {
     let input = input.as_ref();
-    let emojis = specs.finditer_emoji(input).collect::<Vec<_>>();
 
     let mut tokens = Vec::new();
     let mut input_cur = 0;
 
     while input_cur < input.len() {
-        if let Some(emoji) = maybe_starts_with_emoji(input_cur, input, &emojis, specs) {
+        if let Some(emoji) = maybe_starts_with_emoji(input_cur, input, specs) {
             let cursor_offset = emoji.input.len();
             tokens.push(EnsNameToken::Emoji(emoji));
             input_cur += cursor_offset;
@@ -255,31 +254,19 @@ fn perform_nfc_transform(tokens: &mut Vec<EnsNameToken>, specs: &CodePointsSpecs
 
 // given array of codepoints
 // returns the longest valid emoji sequence (or undefined if no match)
-fn maybe_starts_with_emoji(
-    i: usize,
-    label: &str,
-    emojis: &[regex::Match],
-    specs: &CodePointsSpecs,
-) -> Option<TokenEmoji> {
-    emojis.iter().find_map(|emoji| {
-        let start = emoji.start();
-        if start == i {
-            let end = emoji.end();
-            let input_cps = utils::str2cps(&label[start..end]);
-            let cps_no_fe0f = utils::filter_fe0f(&input_cps);
-            let emoji = specs
-                .cps_emoji_no_fe0f_to_pretty(&cps_no_fe0f)
-                .expect("emoji should be found")
-                .clone();
-            Some(TokenEmoji {
-                input: label[start..end].to_string(),
-                cps_input: input_cps,
-                emoji,
-                cps_no_fe0f,
-            })
-        } else {
-            None
-        }
+fn maybe_starts_with_emoji(i: usize, label: &str, specs: &CodePointsSpecs) -> Option<TokenEmoji> {
+    let (end, _) = specs.longest_emoji_at(label, i)?;
+    let input_cps = utils::str2cps(&label[i..end]);
+    let cps_no_fe0f = utils::filter_fe0f(&input_cps);
+    let emoji = specs
+        .cps_emoji_no_fe0f_to_pretty(&cps_no_fe0f)
+        .expect("emoji should be found")
+        .clone();
+    Some(TokenEmoji {
+        input: label[i..end].to_string(),
+        cps_input: input_cps,
+        emoji,
+        cps_no_fe0f,
     })
 }
 
@@ -315,7 +302,7 @@ fn collapse_valid_tokens(tokens: &mut Vec<EnsNameToken>) {
                 }
             }
             let new_token = EnsNameToken::Valid(TokenValid { cps });
-            tokens.splice(i..j, vec![new_token].into_iter());
+            tokens.splice(i..j, vec![new_token]);
         }
         i += 1;
     }
