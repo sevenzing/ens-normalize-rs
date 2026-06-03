@@ -35,7 +35,7 @@ pub type IndexedTestCase<'a> = (usize, &'a TestCase);
 
 lazy_static! {
     pub static ref ENS_TESTS: Vec<Entry> =
-        serde_json::from_str(include_str!("ens_cases.json")).unwrap();
+        serde_json::from_str(include_str!("tests.json")).unwrap();
 }
 
 #[rstest]
