@@ -10,6 +10,7 @@ import requests
 import json
 import hashlib
 import os
+import shutil
 import sys
 import argparse
 from typing import Tuple, Dict, Any
@@ -149,23 +150,38 @@ def check_for_updates(
     return should_update, metadata
 
 
-def update_files(nf_local: str, spec_local: str, tests_local: str) -> None:
-    """Update the local files with the downloaded versions."""
+def remove_json_backups(*paths: str) -> None:
+    """Remove stale .backup files from older updater runs."""
+    for path in paths:
+        backup = f"{path}.backup"
+        if os.path.exists(backup):
+            os.remove(backup)
+            print(f"Removed stale backup: {backup}")
+
+
+def update_files(
+    nf_local: str,
+    spec_local: str,
+    tests_local: str,
+    nf_changed: bool,
+    spec_changed: bool,
+    tests_changed: bool,
+) -> None:
+    """Replace only changed files; discard unused downloads."""
     print("Updating files...")
-    
-    # Backup original files
-    if os.path.exists(nf_local):
-        os.rename(nf_local, f"{nf_local}.backup")
-    if os.path.exists(spec_local):
-        os.rename(spec_local, f"{spec_local}.backup")
-    if os.path.exists(tests_local):
-        os.rename(tests_local, f"{tests_local}.backup")
-    
-    # Move new files to their final locations
-    os.rename("nf_new.json", nf_local)
-    os.rename("spec_new.json", spec_local)
-    os.rename("tests_new.json", tests_local)
-    
+    remove_json_backups(nf_local, spec_local, tests_local)
+
+    for changed, new_path, local_path in (
+        (nf_changed, "nf_new.json", nf_local),
+        (spec_changed, "spec_new.json", spec_local),
+        (tests_changed, "tests_new.json", tests_local),
+    ):
+        if changed:
+            shutil.move(new_path, local_path)
+            print(f"Updated {local_path}")
+        elif os.path.exists(new_path):
+            os.remove(new_path)
+
     print("Files updated successfully")
 
 
@@ -212,7 +228,14 @@ def main():
         )
         
         if should_update and args.update:
-            update_files(args.nf_local, args.spec_local, args.tests_local)
+            update_files(
+                args.nf_local,
+                args.spec_local,
+                args.tests_local,
+                metadata["nf_changed"],
+                metadata["spec_changed"],
+                metadata["tests_changed"],
+            )
         
         # Output results for GitHub Actions
         if 'GITHUB_ACTIONS' in os.environ:
