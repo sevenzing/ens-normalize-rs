@@ -20,7 +20,7 @@ Or pin a semver range in `Cargo.toml` (see [crates.io](https://crates.io/crates/
 
 ```toml
 [dependencies]
-ens-normalize-rs = "0.1"
+ens-normalize-rs = "0.2"
 ```
 
 ## Usage
