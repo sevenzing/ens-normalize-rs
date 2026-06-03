@@ -13,23 +13,26 @@ on:
         default: false
         type: boolean
 
+concurrency:
+  group: unicode-update
+  cancel-in-progress: true
+
 jobs:
   check-and-update:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
-        persist-credentials: true
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
@@ -41,78 +44,61 @@ jobs:
     - name: Check for updates
       id: check_updates
       run: |
-        python tools/unicode-update.py --force=${{ inputs.force_update }}
+        python tools/unicode-update.py --force=${{ github.event_name == 'workflow_dispatch' && inputs.force_update || 'false' }}
 
     - name: Update files if changes detected
       if: steps.check_updates.outputs.should_update == 'true'
       run: |
         python tools/unicode-update.py --update
 
-    - name: Configure Git
-      if: steps.check_updates.outputs.should_update == 'true'
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-
-    - name: Create commit
-      if: steps.check_updates.outputs.should_update == 'true'
-      run: |
-        git add src/static_data/nf.json src/static_data/spec.json
-        
-        # Create detailed commit message
-        COMMIT_MSG="Update Unicode normalization files
-        
-        - nf.json: ${{ steps.check_updates.outputs.nf_created }} (Unicode ${{ steps.check_updates.outputs.nf_unicode }})
-        - spec.json: ${{ steps.check_updates.outputs.spec_created }} (Unicode ${{ steps.check_updates.outputs.spec_unicode }}, CLDR ${{ steps.check_updates.outputs.spec_cldr }})
-        
-        Files updated from:
-        - https://raw.githubusercontent.com/adraffy/ens-normalize.js/refs/heads/main/derive/output/nf.json
-        - https://raw.githubusercontent.com/adraffy/ens-normalize.js/refs/heads/main/derive/output/spec.json
-        
-        This is an automated update by the Unicode Update workflow."
-        
-        git commit -m "$COMMIT_MSG"
-
     - name: Create Pull Request
       if: steps.check_updates.outputs.should_update == 'true'
-      uses: peter-evans/create-pull-request@v5
+      uses: peter-evans/create-pull-request@v7
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        commit-message: "Update Unicode normalization files"
-        title: "🔄 Update Unicode normalization files (${{ steps.check_updates.outputs.nf_created }})"
-        body: |
-          ## 📋 Summary
-          
-          This PR automatically updates the Unicode normalization files used by the ENS normalization library.
-          
-          ## 📊 Changes
-          
-          | File | Status | Created | Unicode Version |
-          |------|--------|---------|-----------------|
-          | `nf.json` | ${{ steps.check_updates.outputs.nf_changed == 'true' && '✅ Updated' || '➖ No changes' }} | ${{ steps.check_updates.outputs.nf_created }} | ${{ steps.check_updates.outputs.nf_unicode }} |
-          | `spec.json` | ${{ steps.check_updates.outputs.spec_changed == 'true' && '✅ Updated' || '➖ No changes' }} | ${{ steps.check_updates.outputs.spec_created }} | ${{ steps.check_updates.outputs.spec_unicode }} |
-          
-          ## 🔗 Source
-          
-          Files updated from:
-          - [nf.json](https://raw.githubusercontent.com/adraffy/ens-normalize.js/refs/heads/main/derive/output/nf.json)
-          - [spec.json](https://raw.githubusercontent.com/adraffy/ens-normalize.js/refs/heads/main/derive/output/spec.json)
-          
-          ## 🤖 Automation
-          
-          This PR was created automatically by the [Unicode Update workflow](.github/workflows/unicode-update.yml).
-          
-          ## ✅ Next Steps
-          
-          - [ ] Review the changes
-          - [ ] Run tests to ensure compatibility
-          - [ ] Merge if everything looks good
-        branch: update-unicode-files-${{ github.run_number }}
-        delete-branch: true
+        commit-message: |
+          Update Unicode normalization files
+
+          - nf.json: ${{ steps.check_updates.outputs.nf_created }} (Unicode ${{ steps.check_updates.outputs.nf_unicode }})
+          - spec.json: ${{ steps.check_updates.outputs.spec_created }} (Unicode ${{ steps.check_updates.outputs.spec_unicode }}, CLDR ${{ steps.check_updates.outputs.spec_cldr }})
+          - tests.json: ${{ steps.check_updates.outputs.tests_created }} (Unicode ${{ steps.check_updates.outputs.tests_unicode }}, CLDR ${{ steps.check_updates.outputs.tests_cldr }})
+        title: "🔄 Update Unicode normalization files"
+        branch: update-unicode-files
+        base: master
+        delete-branch: false
         labels: |
           automated
           unicode-update
           dependencies
+        body: |
+          ## 📋 Summary
+
+          This PR automatically updates the Unicode normalization files used by the ENS normalization library.
+
+          ## 📊 Changes
+
+          | File | Status | Created | Unicode Version |
+          |------|--------|---------|-----------------|
+          | `nf.json` | ${{ steps.check_updates.outputs.nf_changed == 'true' && '✅ Updated' || '➖ No changes' }} | ${{ steps.check_updates.outputs.nf_created }} | ${{ steps.check_updates.outputs.nf_unicode }} |
+          | `spec.json` | ${{ steps.check_updates.outputs.spec_changed == 'true' && '✅ Updated' || '➖ No changes' }} | ${{ steps.check_updates.outputs.spec_created }} | ${{ steps.check_updates.outputs.spec_unicode }} |
+          | `tests.json` | ${{ steps.check_updates.outputs.tests_changed == 'true' && '✅ Updated' || '➖ No changes' }} | ${{ steps.check_updates.outputs.tests_created }} | ${{ steps.check_updates.outputs.tests_unicode }} |
+
+          ## 🔗 Source
+
+          Files updated from:
+          - [nf.json](https://raw.githubusercontent.com/adraffy/ens-normalize.js/refs/heads/main/derive/output/nf.json)
+          - [spec.json](https://raw.githubusercontent.com/adraffy/ens-normalize.js/refs/heads/main/derive/output/spec.json)
+          - [tests.json](https://raw.githubusercontent.com/adraffy/ens-normalize.js/refs/heads/main/validate/tests.json)
+
+          ## 🤖 Automation
+
+          This PR was created automatically by the [Unicode Update workflow](.github/workflows/unicode-update.yml).
+
+          ## ✅ Next Steps
+
+          - [ ] Review the changes
+          - [ ] Run tests to ensure compatibility
+          - [ ] Merge if everything looks good
 
     - name: No changes detected
       if: steps.check_updates.outputs.should_update == 'false'
