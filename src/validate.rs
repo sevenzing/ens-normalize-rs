@@ -212,7 +212,7 @@ fn check_and_get_group(
         .collect::<HashSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
-    let group = determine_group(&unique_cps, specs).cloned()?;
+    let group = determine_group(label, &unique_cps, specs).cloned()?;
     check_group(&group, &cps, specs)?;
     check_whole(&group, &unique_cps, specs)?;
     Ok(group)
@@ -223,13 +223,17 @@ fn check_group(
     cps: &[CodePoint],
     specs: &CodePointsSpecs,
 ) -> Result<(), ProcessError> {
-    for cp in cps.iter() {
+    for (i, cp) in cps.iter().enumerate() {
         if !group.contains_cp(*cp) {
-            return Err(ProcessError::Confused(format!(
-                "symbol {} not present in group {}",
-                utils::cp2str(*cp),
-                group.name
-            )));
+            return Err(ProcessError::CurrableError {
+                inner: CurrableError::Confused {
+                    group_name: group.name.to_string(),
+                    cp: *cp,
+                },
+                index: i,
+                sequence: utils::cps2str(cps),
+                maybe_suggest: Some("".to_string()),
+            });
         }
     }
     if group.cm_absent {
@@ -271,10 +275,12 @@ fn check_whole(
     for group_name in maker {
         let confused_group_candidate = specs.group_by_name(group_name).expect("group must exist");
         if confused_group_candidate.contains_all_cps(&shared) {
-            return Err(ProcessError::ConfusedGroups {
-                group1: group.name.to_string(),
-                group2: confused_group_candidate.name.to_string(),
-            });
+            return Err(ProcessError::DisallowedSequence(
+                DisallowedSequence::ConfusedGroups {
+                    group1: group.name.to_string(),
+                    group2: confused_group_candidate.name.to_string(),
+                },
+            ));
         }
     }
     Ok(())
@@ -317,16 +323,42 @@ fn get_groups_candidates_and_shared_cps(
 }
 
 fn determine_group<'a>(
+    label: &TokenizedLabel,
     unique_cps: &'a [CodePoint],
     specs: &'a CodePointsSpecs,
 ) -> Result<&'a ParsedGroup, ProcessError> {
-    specs
-        .groups_for_cps(unique_cps)
-        .next()
-        .ok_or(ProcessError::Confused(format!(
-            "no group found for {:?}",
-            unique_cps
-        )))
+    if let Some(group) = specs.groups_for_cps(unique_cps).next() {
+        Ok(group)
+    } else {
+        let mut maybe_group = None;
+        for last_cp_index in 0..unique_cps.len() {
+            let cps = &unique_cps[..last_cp_index + 1];
+            if let Some(group) = specs.groups_for_cps(cps).next() {
+                maybe_group = Some(group);
+                continue;
+            } else {
+                let cp = unique_cps[last_cp_index];
+                let index_of_cp = label
+                    .iter_cps()
+                    .position(|cp_in_label| cp_in_label == cp)
+                    .expect("cp must exist in label");
+                let inner = match maybe_group {
+                    Some(group) => CurrableError::Confused {
+                        group_name: group.name.to_string(),
+                        cp,
+                    },
+                    None => CurrableError::Disallowed,
+                };
+                return Err(ProcessError::CurrableError {
+                    inner,
+                    index: index_of_cp,
+                    sequence: utils::cp2str(cp),
+                    maybe_suggest: Some("".to_string()),
+                });
+            }
+        }
+        unreachable!()
+    }
 }
 
 #[cfg(test)]
@@ -386,7 +418,7 @@ mod tests {
         #[case] expected: Result<LabelType, ProcessError>,
         specs: &CodePointsSpecs,
     ) {
-        let name = TokenizedName::from_input(input, specs, true).unwrap();
+        let name = TokenizedName::from_input(input, specs, true);
         let label = name.iter_labels().next().unwrap();
         let result = validate_label(label, specs);
         assert_eq!(

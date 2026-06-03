@@ -25,7 +25,7 @@ impl EnsNameNormalizer {
     }
 
     /// Tokenize the input string, return a `TokenizedName` object with `Vec<EnsNameToken>` inside
-    pub fn tokenize(&self, input: impl AsRef<str>) -> Result<TokenizedName, ProcessError> {
+    pub fn tokenize(&self, input: impl AsRef<str>) -> TokenizedName {
         TokenizedName::from_input(input.as_ref(), &self.specs, true)
     }
 
@@ -33,7 +33,7 @@ impl EnsNameNormalizer {
     /// This function will tokenize and validate the name. Processed name can be normalized and beautified.
     pub fn process(&self, input: impl AsRef<str>) -> Result<ProcessedName, ProcessError> {
         let input = input.as_ref();
-        let tokenized = self.tokenize(input)?;
+        let tokenized = self.tokenize(input);
         let labels = validate_name(&tokenized, &self.specs)?;
         Ok(ProcessedName { tokenized, labels })
     }
@@ -60,7 +60,7 @@ impl ProcessedName {
 }
 
 /// `no-cache` version of [`EnsNameNormalizer::tokenize`]
-pub fn tokenize(input: impl AsRef<str>) -> Result<TokenizedName, ProcessError> {
+pub fn tokenize(input: impl AsRef<str>) -> TokenizedName {
     EnsNameNormalizer::default().tokenize(input)
 }
 
