@@ -10,6 +10,6 @@ fn main() {
     for _ in 0..SIZE {
         let _name = normalizer.process(&name).unwrap();
     }
-    // Total time to process 100 names: 728.916542ms
+    // Total time to process 100 names: 1.064667541s
     println!("Total time to process {SIZE} names: {:?}", now.elapsed());
 }

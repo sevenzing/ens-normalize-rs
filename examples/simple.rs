@@ -10,8 +10,8 @@ fn main() {
     assert_eq!(beautified_name, "🅰️🅱️.eth");
 
     // Using normalize directly
-    let normalized = normalizer.normalize("Levvv.eth").unwrap();
-    assert_eq!(normalized, "levvv.eth");
+    let normalized = normalizer.normalize("LLEV.me").unwrap();
+    assert_eq!(normalized, "llev.me");
 
     // Handling errors
     assert!(matches!(
