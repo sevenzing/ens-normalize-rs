@@ -16,11 +16,11 @@ A Rust implementation of ENS (Ethereum Name Service) name normalization.
 cargo add ens-normalize-rs
 ```
 
-Or add this to your project using Cargo:
+Or pin a semver range in `Cargo.toml` (see [crates.io](https://crates.io/crates/ens-normalize-rs) for the latest version):
 
 ```toml
 [dependencies]
-ens-normalize-rs = "0.1.1"
+ens-normalize-rs = "0.1"
 ```
 
 ## Usage
@@ -75,6 +75,16 @@ To run all tests simply run:
 cargo test
 ```
 
+
+## Releasing (maintainers)
+
+Releases are automated with [release-plz](https://release-plz.dev/):
+
+1. Merge PRs using [Conventional Commits](https://www.conventionalcommits.org/) (`feat:` → minor, `fix:` → patch, `feat!:` / `BREAKING:` → major).
+2. release-plz opens or updates a **Release PR** (version bump in `Cargo.toml` + `CHANGELOG.md`).
+3. Merge the Release PR → CI tags the release and runs `cargo publish` to [crates.io](https://crates.io/crates/ens-normalize-rs).
+
+**One-time setup:** add a [crates.io API token](https://crates.io/settings/tokens) with publish permission for `ens-normalize-rs` as the GitHub Actions secret `CARGO_REGISTRY_TOKEN` (repo → Settings → Secrets and variables → Actions).
 
 ## Roadmap
 

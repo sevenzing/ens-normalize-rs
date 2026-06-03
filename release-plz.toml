@@ -1,0 +1,4 @@
+[[package]]
+name = "ens-normalize-rs"
+changelog_path = "CHANGELOG.md"
+publish = true
