@@ -1,4 +1,21 @@
+[workspace]
+pr_branch_prefix = "release-plz-"
+pr_labels = ["release"]
+
 [[package]]
 name = "ens-normalize-rs"
 changelog_path = "CHANGELOG.md"
 publish = true
+
+[changelog]
+header = "# Changelog\n"
+protect_breaking_commits = true
+commit_parsers = [
+  { message = "^chore", skip = true },
+  { message = "^ci(\\(|:)", skip = true },
+  { message = "^Merge ", skip = true },
+  { message = "^fmt", skip = true },
+  { message = "^clippy", skip = true },
+  { message = "^cargo doc", skip = true },
+  { message = "^add cicd", skip = true },
+]
